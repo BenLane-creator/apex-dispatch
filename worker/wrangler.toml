@@ -5,3 +5,8 @@ workers_dev = true
 
 [vars]
 ALLOWED_ORIGINS = "https://apex.benlane.us,https://*.pages.dev,http://localhost:8080,http://127.0.0.1:8080"
+preview_urls = false
+
+[[routes]]
+pattern = "api.benlane.us"
+custom_domain = true
