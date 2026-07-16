@@ -1,5 +1,7 @@
 # Apex Dispatch Saturday Operations Plan
 
+**A BenDESK product**
+
 ## Executive summary
 
 Apex Dispatch is a coordinated two-person delivery operation. JF executes field operations using the official DoorDash account and a 2020 Mazda3. BL manages offer analysis, staging, route recovery, performance tracking, and field assistance.
@@ -134,3 +136,29 @@ After four Saturdays:
 - Revise thresholds if the operation is too selective or accumulates excess mileage.
 - Add screenshot-assisted entry only if manual entry causes missed decisions.
 - Add another platform only after the DoorDash baseline is stable enough to measure incremental value.
+
+## Route-intelligence operating procedure
+
+Before route calculations:
+
+1. Confirm `https://apex.benlane.us` is using HTTPS and the Routes status shows ready.
+2. Enter or confirm the current origin, exact merchant pickup address, customer address, and recovery/staging point.
+3. Use GPS only while parked or while BL is operating the dispatcher device.
+4. Select route avoidance preferences only when operationally justified.
+
+For an offer:
+
+1. Calculate the traffic-aware route before scoring when decision time permits.
+2. Review current-to-pickup, pickup-to-customer, and customer-to-recovery legs separately.
+3. Use the total operational mileage and traffic-adjusted minutes inserted by Apex.
+4. Review traffic delay, ETA, and alternatives, but do not treat avoidance preferences as guarantees.
+5. Open Google Maps for active navigation after JF accepts the order.
+6. Refresh the route when it becomes stale, when conditions materially change, or after the active leg changes.
+
+For recovery decisions:
+
+1. Use the matrix to compare practical staging corridors from the current drop-off.
+2. Prefer the lowest-time productive recovery point rather than the shortest distance in isolation.
+3. Consider known restaurant density, peak demand, and unpaid return exposure before selecting the matrix winner.
+
+Safety rule: BL performs route entry and analysis whenever the vehicle is moving. JF does not interact with Apex while driving.

@@ -4,19 +4,22 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#111827" />
-  <meta name="description" content="Apex Dispatch decision-support app for evaluating delivery offers and tracking Saturday operations." />
-  <title>Apex Dispatch</title>
+  <meta name="description" content="Apex Dispatch by BenDESK — traffic-aware delivery decision support, route intelligence, recovery planning, and shift tracking." />
+  <meta name="author" content="BenDESK" />
+  <title>Apex Dispatch · BenDESK</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="app-header">
-    <div>
-      <p class="eyebrow">Saturday logistics pilot</p>
+    <div class="brand-lockup">
+      <p class="eyebrow">Delivery route intelligence</p>
       <h1>Apex Dispatch</h1>
+      <p class="brand-byline">by <strong>BenDESK</strong></p>
     </div>
     <div class="header-actions">
+      <span id="routeApiStatus" class="status-pill status-off">Routes unchecked</span>
       <span id="shiftStatus" class="status-pill status-off">Shift off</span>
       <button id="installButton" class="ghost-button" hidden>Install</button>
     </div>
@@ -32,7 +35,7 @@
   <main>
     <section id="dispatch" class="tab-panel active">
       <div class="notice">
-        <strong>Decision support only.</strong> JF keeps control of the DoorDash app and makes the final accept/decline decision. No account credentials or automated taps are used.
+        <strong>Decision support only.</strong> JF keeps control of DoorDash and the vehicle. Apex estimates traffic, mileage, ETA, alternatives, and recovery cost; Google Maps controls live navigation and rerouting.
       </div>
 
       <div class="grid two-column">
@@ -42,10 +45,73 @@
               <p class="eyebrow">Incoming offer</p>
               <h2>Evaluate an order</h2>
             </div>
-            <button id="resetOffer" class="text-button">Reset</button>
+            <button id="resetOffer" class="text-button" type="button">Reset</button>
           </div>
 
-          <form id="offerForm" class="form-grid">
+          <section class="route-builder" aria-labelledby="routeBuilderHeading">
+            <div class="section-heading-inline">
+              <div>
+                <p class="eyebrow">Google Routes API</p>
+                <h3 id="routeBuilderHeading">Route intelligence</h3>
+              </div>
+              <span id="routeFreshnessBadge" class="mini-pill neutral">No route</span>
+            </div>
+
+            <div class="form-grid">
+              <label class="full-width">
+                Starting point
+                <div class="input-action-row">
+                  <input id="originAddress" type="text" placeholder="Use device location or enter an address" autocomplete="street-address" />
+                  <button id="useCurrentLocation" class="secondary-button compact-button" type="button">Use GPS</button>
+                </div>
+                <small id="originLocationStatus" class="field-help">Location permission is requested only when you tap Use GPS.</small>
+              </label>
+
+              <label class="full-width">
+                Pickup address
+                <input id="pickupAddress" type="text" placeholder="Restaurant or store address" autocomplete="off" />
+              </label>
+
+              <label class="full-width">
+                Customer / drop-off address
+                <input id="dropoffAddress" type="text" placeholder="Customer destination" autocomplete="off" />
+              </label>
+
+              <label class="full-width">
+                Recovery / staging address
+                <div class="input-action-row">
+                  <input id="recoveryAddress" type="text" placeholder="Red Cliffs / Mall Drive staging point" autocomplete="off" />
+                  <button id="useDefaultRecovery" class="secondary-button compact-button" type="button">Use default</button>
+                </div>
+              </label>
+
+              <label class="checkbox-row">
+                <input id="routeAlternatives" type="checkbox" checked />
+                Request alternative routes
+              </label>
+              <label class="checkbox-row">
+                <input id="avoidTolls" type="checkbox" />
+                Avoid tolls
+              </label>
+              <label class="checkbox-row">
+                <input id="avoidHighways" type="checkbox" />
+                Avoid highways
+              </label>
+              <label class="checkbox-row">
+                <input id="avoidFerries" type="checkbox" checked />
+                Avoid ferries
+              </label>
+            </div>
+
+            <div class="button-row wrap route-actions">
+              <button id="calculateRoute" class="primary-button" type="button">Calculate traffic route</button>
+              <button id="refreshRoute" class="secondary-button" type="button" disabled>Refresh traffic</button>
+              <button id="openFullRoute" class="ghost-button" type="button" disabled>Open full route</button>
+            </div>
+            <p id="routeStatusMessage" class="route-status" role="status">Set the Worker URL in Settings, then enter pickup and drop-off locations.</p>
+          </section>
+
+          <form id="offerForm" class="form-grid offer-fields">
             <label>
               Platform
               <select id="platform" required>
@@ -60,12 +126,12 @@
             </label>
 
             <label>
-              Displayed miles
+              Displayed / outbound miles
               <input id="displayedMiles" type="number" min="0" step="0.1" inputmode="decimal" placeholder="5.2" required />
             </label>
 
             <label>
-              Estimated return miles
+              Recovery / return miles
               <input id="returnMiles" type="number" min="0" step="0.1" inputmode="decimal" placeholder="2.0" />
             </label>
 
@@ -89,8 +155,13 @@
             </label>
 
             <label>
-              Drive + drop-off estimate (min)
+              Outbound drive + drop-off (min)
               <input id="driveMinutes" type="number" min="1" step="1" inputmode="numeric" value="18" />
+            </label>
+
+            <label>
+              Recovery / return drive (min)
+              <input id="returnMinutes" type="number" min="0" step="1" inputmode="numeric" value="0" />
             </label>
 
             <label>
@@ -131,48 +202,62 @@
           <p class="eyebrow">Recommendation</p>
           <div id="verdictBadge" class="verdict verdict-neutral">WAITING</div>
           <div id="decisionSummary" class="decision-summary">
-            Enter the offer details to calculate profitability, time efficiency, vehicle cost, and territory risk.
+            Enter the offer details to calculate profitability, time efficiency, vehicle cost, traffic, and territory risk.
           </div>
 
           <div class="metric-grid">
-            <div class="metric">
-              <span>Score</span>
-              <strong id="scoreMetric">—</strong>
-            </div>
-            <div class="metric">
-              <span>Operational miles</span>
-              <strong id="operationalMilesMetric">—</strong>
-            </div>
-            <div class="metric">
-              <span>Gross $/mile</span>
-              <strong id="grossPerMileMetric">—</strong>
-            </div>
-            <div class="metric">
-              <span>Est. net $/mile</span>
-              <strong id="netPerMileMetric">—</strong>
-            </div>
-            <div class="metric">
-              <span>Est. gross hourly</span>
-              <strong id="grossHourlyMetric">—</strong>
-            </div>
-            <div class="metric">
-              <span>Est. net before tax</span>
-              <strong id="netOrderMetric">—</strong>
-            </div>
+            <div class="metric"><span>Score</span><strong id="scoreMetric">—</strong></div>
+            <div class="metric"><span>Operational miles</span><strong id="operationalMilesMetric">—</strong></div>
+            <div class="metric"><span>Gross $/mile</span><strong id="grossPerMileMetric">—</strong></div>
+            <div class="metric"><span>Est. net $/mile</span><strong id="netPerMileMetric">—</strong></div>
+            <div class="metric"><span>Est. gross hourly</span><strong id="grossHourlyMetric">—</strong></div>
+            <div class="metric"><span>Est. net before tax</span><strong id="netOrderMetric">—</strong></div>
           </div>
+
+          <section class="route-results" aria-labelledby="routeResultsHeading">
+            <div class="section-heading-inline">
+              <div>
+                <p class="eyebrow">Live route estimate</p>
+                <h3 id="routeResultsHeading">Mileage, traffic and ETA</h3>
+              </div>
+              <span id="routeResultAge" class="mini-pill neutral">Not calculated</span>
+            </div>
+
+            <div class="metric-grid route-metric-grid">
+              <div class="metric"><span>To pickup</span><strong id="pickupRouteMetric">—</strong></div>
+              <div class="metric"><span>To customer</span><strong id="dropoffRouteMetric">—</strong></div>
+              <div class="metric"><span>Recovery</span><strong id="recoveryRouteMetric">—</strong></div>
+              <div class="metric"><span>Traffic delay</span><strong id="trafficDelayMetric">—</strong></div>
+              <div class="metric"><span>Pickup ETA</span><strong id="pickupEtaMetric">—</strong></div>
+              <div class="metric"><span>Delivery ETA</span><strong id="deliveryEtaMetric">—</strong></div>
+              <div class="metric"><span>Back in zone</span><strong id="recoveryEtaMetric">—</strong></div>
+              <div class="metric"><span>Total route</span><strong id="totalRouteMetric">—</strong></div>
+            </div>
+
+            <div id="routePreviewWrap" class="route-preview-wrap" hidden>
+              <svg id="routePreview" class="route-preview" viewBox="0 0 560 220" role="img" aria-label="Route geometry preview"></svg>
+              <p class="field-help">Geometry preview only; open Google Maps for the road map and live turn-by-turn navigation.</p>
+            </div>
+
+            <div id="routeAlternativesPanel" class="route-alternatives">
+              <p class="empty-state compact-empty">Calculate a route to compare traffic-aware alternatives.</p>
+            </div>
+
+            <div class="button-row wrap">
+              <button id="navigatePickup" class="secondary-button" type="button" disabled>Navigate to pickup</button>
+              <button id="navigateDropoff" class="secondary-button" type="button" disabled>Navigate to customer</button>
+              <button id="navigateRecovery" class="secondary-button" type="button" disabled>Navigate to staging</button>
+            </div>
+          </section>
 
           <div class="analysis-block">
             <h3>BL instructions</h3>
-            <ul id="dispatcherInstructions">
-              <li>Enter an offer to generate the dispatch recommendation.</li>
-            </ul>
+            <ul id="dispatcherInstructions"><li>Enter an offer to generate the dispatch recommendation.</li></ul>
           </div>
 
           <div class="analysis-block">
             <h3>JF instructions</h3>
-            <ul id="driverInstructions">
-              <li>JF retains control of the app, vehicle, safety decisions, and final acceptance.</li>
-            </ul>
+            <ul id="driverInstructions"><li>JF retains control of the app, vehicle, safety decisions, and final acceptance.</li></ul>
           </div>
 
           <div class="button-row">
@@ -187,10 +272,7 @@
       <div class="grid two-column">
         <article class="card">
           <div class="card-heading">
-            <div>
-              <p class="eyebrow">Saturday operations</p>
-              <h2>Shift control</h2>
-            </div>
+            <div><p class="eyebrow">Saturday operations</p><h2>Shift control</h2></div>
           </div>
 
           <div class="button-row wrap">
@@ -201,60 +283,27 @@
           </div>
 
           <div class="metric-grid large">
-            <div class="metric">
-              <span>Elapsed</span>
-              <strong id="elapsedMetric">00:00</strong>
-            </div>
-            <div class="metric">
-              <span>Gross earnings</span>
-              <strong id="shiftGrossMetric">$0.00</strong>
-            </div>
-            <div class="metric">
-              <span>Operational miles</span>
-              <strong id="shiftMilesMetric">0.0</strong>
-            </div>
-            <div class="metric">
-              <span>Est. vehicle cost</span>
-              <strong id="shiftCostMetric">$0.00</strong>
-            </div>
-            <div class="metric">
-              <span>Est. net before tax</span>
-              <strong id="shiftNetMetric">$0.00</strong>
-            </div>
-            <div class="metric">
-              <span>Gross / active hour</span>
-              <strong id="shiftHourlyMetric">$0.00</strong>
-            </div>
+            <div class="metric"><span>Elapsed</span><strong id="elapsedMetric">00:00</strong></div>
+            <div class="metric"><span>Gross earnings</span><strong id="shiftGrossMetric">$0.00</strong></div>
+            <div class="metric"><span>Operational miles</span><strong id="shiftMilesMetric">0.0</strong></div>
+            <div class="metric"><span>Est. vehicle cost</span><strong id="shiftCostMetric">$0.00</strong></div>
+            <div class="metric"><span>Est. net before tax</span><strong id="shiftNetMetric">$0.00</strong></div>
+            <div class="metric"><span>Gross / active hour</span><strong id="shiftHourlyMetric">$0.00</strong></div>
           </div>
 
           <form id="manualCompletedForm" class="form-grid compact">
             <h3 class="full-width">Add completed delivery</h3>
-            <label>
-              Payout ($)
-              <input id="completedPayout" type="number" min="0" step="0.25" required />
-            </label>
-            <label>
-              Actual miles
-              <input id="completedMiles" type="number" min="0" step="0.1" required />
-            </label>
-            <label>
-              Actual minutes
-              <input id="completedMinutes" type="number" min="1" step="1" required />
-            </label>
-            <label>
-              Merchant
-              <input id="completedMerchant" type="text" />
-            </label>
+            <label>Payout ($)<input id="completedPayout" type="number" min="0" step="0.25" required /></label>
+            <label>Actual miles<input id="completedMiles" type="number" min="0" step="0.1" required /></label>
+            <label>Actual minutes<input id="completedMinutes" type="number" min="1" step="1" required /></label>
+            <label>Merchant<input id="completedMerchant" type="text" /></label>
             <button class="primary-button full-width" type="submit">Add completed delivery</button>
           </form>
         </article>
 
         <article class="card">
           <div class="card-heading">
-            <div>
-              <p class="eyebrow">KPI view</p>
-              <h2>Shift performance</h2>
-            </div>
+            <div><p class="eyebrow">KPI view</p><h2>Shift performance</h2></div>
             <button id="exportCsv" class="text-button">Export CSV</button>
           </div>
 
@@ -262,20 +311,8 @@
 
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Status</th>
-                  <th>Merchant</th>
-                  <th>Payout</th>
-                  <th>Miles</th>
-                  <th>Minutes</th>
-                  <th>Net</th>
-                </tr>
-              </thead>
-              <tbody id="deliveryLogBody">
-                <tr><td colspan="7" class="empty-state">No deliveries logged.</td></tr>
-              </tbody>
+              <thead><tr><th>Time</th><th>Status</th><th>Merchant</th><th>Payout</th><th>Miles</th><th>Minutes</th><th>Net</th></tr></thead>
+              <tbody id="deliveryLogBody"><tr><td colspan="7" class="empty-state">No deliveries logged.</td></tr></tbody>
             </table>
           </div>
 
@@ -288,33 +325,12 @@
       <div class="grid two-column">
         <article class="card">
           <div class="card-heading">
-            <div>
-              <p class="eyebrow">Local operating intelligence</p>
-              <h2>Territory rules</h2>
-            </div>
+            <div><p class="eyebrow">Local operating intelligence</p><h2>Territory rules</h2></div>
           </div>
 
-          <div class="zone-card core-zone">
-            <div>
-              <strong>Core zone</strong>
-              <p>Red Cliffs / Mall Drive, River Road, St. George Boulevard, central Washington.</p>
-            </div>
-            <span>0–5 operational miles</span>
-          </div>
-          <div class="zone-card conditional-zone">
-            <div>
-              <strong>Conditional zone</strong>
-              <p>Outer St. George, Washington Fields, Little Valley, Bloomington.</p>
-            </div>
-            <span>5–8 operational miles</span>
-          </div>
-          <div class="zone-card outer-zone">
-            <div>
-              <strong>Outer zone</strong>
-              <p>Far Santa Clara, Ivins, SunRiver, airport/desert edge, remote subdivisions.</p>
-            </div>
-            <span>Premium pay only</span>
-          </div>
+          <div class="zone-card core-zone"><div><strong>Core zone</strong><p>Red Cliffs / Mall Drive, River Road, St. George Boulevard, central Washington.</p></div><span>0–5 operational miles</span></div>
+          <div class="zone-card conditional-zone"><div><strong>Conditional zone</strong><p>Outer St. George, Washington Fields, Little Valley, Bloomington.</p></div><span>5–8 operational miles</span></div>
+          <div class="zone-card outer-zone"><div><strong>Outer zone</strong><p>Far Santa Clara, Ivins, SunRiver, airport/desert edge, remote subdivisions.</p></div><span>Premium pay only</span></div>
 
           <div class="analysis-block">
             <h3>Recommended staging sequence</h3>
@@ -329,51 +345,50 @@
 
         <article class="card">
           <div class="card-heading">
-            <div>
-              <p class="eyebrow">Learning database</p>
-              <h2>Restaurant intelligence</h2>
-            </div>
+            <div><p class="eyebrow">Routes matrix</p><h2>Compare destinations</h2></div>
+          </div>
+          <p class="muted-copy">Compare several staging points, merchants, or offer destinations from one origin using traffic-aware distance and ETA.</p>
+          <form id="matrixForm" class="form-grid compact">
+            <label class="full-width">
+              Matrix origin
+              <div class="input-action-row">
+                <input id="matrixOrigin" type="text" placeholder="Use current drop-off, GPS, or type an address" />
+                <button id="matrixUseDropoff" class="secondary-button compact-button" type="button">Current drop-off</button>
+                <button id="matrixUseGps" class="secondary-button compact-button" type="button">GPS</button>
+              </div>
+            </label>
+            <label class="full-width">
+              Candidate destinations — one per line
+              <textarea id="matrixDestinations" rows="6" placeholder="Red Cliffs Mall, St. George, UT&#10;River Road, St. George, UT&#10;Washington commercial corridor, Washington, UT"></textarea>
+            </label>
+            <button id="compareDestinations" class="primary-button full-width" type="submit">Compare routes</button>
+          </form>
+          <p id="matrixStatus" class="route-status">No matrix calculated.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Rank</th><th>Destination</th><th>Miles</th><th>Time</th><th>Traffic</th><th>ETA</th><th></th></tr></thead>
+              <tbody id="matrixResultsBody"><tr><td colspan="7" class="empty-state">Enter destinations to compare.</td></tr></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="card full-grid-card">
+          <div class="card-heading">
+            <div><p class="eyebrow">Learning database</p><h2>Restaurant intelligence</h2></div>
           </div>
 
           <form id="restaurantForm" class="form-grid compact">
-            <label>
-              Restaurant
-              <input id="restaurantName" type="text" required />
-            </label>
-            <label>
-              Grade
-              <select id="restaurantGrade">
-                <option value="A">A — fast and reliable</option>
-                <option value="B">B — acceptable</option>
-                <option value="C">C — inconsistent</option>
-                <option value="D">D — avoid</option>
-              </select>
-            </label>
-            <label>
-              Typical wait (min)
-              <input id="restaurantWait" type="number" min="0" step="1" value="8" />
-            </label>
-            <label>
-              Notes
-              <input id="restaurantNotes" type="text" placeholder="Parking, pickup shelf, delays…" />
-            </label>
+            <label>Restaurant<input id="restaurantName" type="text" required /></label>
+            <label>Grade<select id="restaurantGrade"><option value="A">A — fast and reliable</option><option value="B">B — acceptable</option><option value="C">C — inconsistent</option><option value="D">D — avoid</option></select></label>
+            <label>Typical wait (min)<input id="restaurantWait" type="number" min="0" step="1" value="8" /></label>
+            <label>Notes<input id="restaurantNotes" type="text" placeholder="Parking, pickup shelf, delays…" /></label>
             <button class="primary-button full-width" type="submit">Save restaurant</button>
           </form>
 
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr>
-                  <th>Restaurant</th>
-                  <th>Grade</th>
-                  <th>Wait</th>
-                  <th>Notes</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="restaurantTableBody">
-                <tr><td colspan="5" class="empty-state">No restaurant intelligence saved.</td></tr>
-              </tbody>
+              <thead><tr><th>Restaurant</th><th>Grade</th><th>Wait</th><th>Notes</th><th></th></tr></thead>
+              <tbody id="restaurantTableBody"><tr><td colspan="5" class="empty-state">No restaurant intelligence saved.</td></tr></tbody>
             </table>
           </div>
         </article>
@@ -386,64 +401,61 @@
           <p class="eyebrow">Scoring engine</p>
           <h2>Operating thresholds</h2>
           <form id="settingsForm" class="form-grid">
-            <label>
-              Vehicle cost per operational mile ($)
-              <input id="vehicleCost" type="number" min="0" step="0.01" />
-            </label>
-            <label>
-              Core minimum gross $/mile
-              <input id="coreGrossPerMile" type="number" min="0" step="0.05" />
-            </label>
-            <label>
-              Conditional minimum gross $/mile
-              <input id="conditionalGrossPerMile" type="number" min="0" step="0.05" />
-            </label>
-            <label>
-              Outer minimum gross $/mile
-              <input id="outerGrossPerMile" type="number" min="0" step="0.05" />
-            </label>
-            <label>
-              Minimum payout ($)
-              <input id="minimumPayout" type="number" min="0" step="0.25" />
-            </label>
-            <label>
-              Target gross hourly ($)
-              <input id="targetGrossHourly" type="number" min="0" step="1" />
-            </label>
-            <label>
-              Strong gross hourly ($)
-              <input id="strongGrossHourly" type="number" min="0" step="1" />
-            </label>
-            <label>
-              Maximum normal order time (min)
-              <input id="maxOrderMinutes" type="number" min="1" step="1" />
-            </label>
-            <button class="primary-button full-width" type="submit">Save settings</button>
+            <label>Vehicle cost per operational mile ($)<input id="vehicleCost" type="number" min="0" step="0.01" /></label>
+            <label>Core minimum gross $/mile<input id="coreGrossPerMile" type="number" min="0" step="0.05" /></label>
+            <label>Conditional minimum gross $/mile<input id="conditionalGrossPerMile" type="number" min="0" step="0.05" /></label>
+            <label>Outer minimum gross $/mile<input id="outerGrossPerMile" type="number" min="0" step="0.05" /></label>
+            <label>Minimum payout ($)<input id="minimumPayout" type="number" min="0" step="0.25" /></label>
+            <label>Target gross hourly ($)<input id="targetGrossHourly" type="number" min="0" step="1" /></label>
+            <label>Strong gross hourly ($)<input id="strongGrossHourly" type="number" min="0" step="1" /></label>
+            <label>Maximum normal order time (min)<input id="maxOrderMinutes" type="number" min="1" step="1" /></label>
+            <button class="primary-button full-width" type="submit">Save all settings</button>
           </form>
         </article>
 
         <article class="card">
-          <p class="eyebrow">Roadmap</p>
-          <h2>Planned versions</h2>
-          <ol class="roadmap">
-            <li class="done"><strong>V1 — Manual scoring:</strong> offer form, recommendation engine, local intelligence, shift KPIs, CSV export.</li>
-            <li><strong>V1.1 — Screenshot intake:</strong> user-selected screenshot with on-device text extraction; no DoorDash login.</li>
-            <li><strong>V1.2 — Map assistance:</strong> user-supplied pickup/drop-off locations, route and return-zone estimation.</li>
-            <li><strong>V2 — Multi-platform:</strong> Uber Eats, Spark, and shopping-order scoring with platform-specific rules.</li>
-            <li><strong>V3 — Learning model:</strong> predict wait time and zone value from the team's own historical data.</li>
-          </ol>
-
-          <div class="notice compact-notice">
-            <strong>Privacy design:</strong> all V1 data stays in this browser unless the user exports it. The app does not request DoorDash credentials.
+          <p class="eyebrow">Route integration</p>
+          <h2>Routes API settings</h2>
+          <div class="form-grid">
+            <label class="full-width">Cloudflare Worker base URL<input id="routesWorkerUrl" type="url" placeholder="https://api.benlane.us" /></label>
+            <label class="full-width">Default recovery / staging address<input id="defaultRecoveryAddress" type="text" placeholder="Red Cliffs Mall, St. George, UT" /></label>
+            <label>Traffic routing<select id="routingPreference"><option value="TRAFFIC_AWARE_OPTIMAL">Traffic-aware optimal</option><option value="TRAFFIC_AWARE">Traffic-aware faster response</option></select></label>
+            <label>Traffic model<select id="trafficModel"><option value="BEST_GUESS">Best guess</option><option value="OPTIMISTIC">Optimistic</option><option value="PESSIMISTIC">Pessimistic</option></select></label>
+            <label>Route becomes stale after (min)<input id="routeRefreshMinutes" type="number" min="1" max="30" step="1" /></label>
+            <label>Movement refresh threshold (mi)<input id="routeRefreshMiles" type="number" min="0.1" max="5" step="0.1" /></label>
+            <label class="checkbox-row"><input id="autoRefreshRoutes" type="checkbox" />Auto-refresh traffic when GPS movement and time thresholds are met</label>
+            <label class="checkbox-row"><input id="includeTrafficPolyline" type="checkbox" />Request traffic-on-polyline detail (higher API cost)</label>
           </div>
+          <div class="button-row wrap settings-actions">
+            <button id="saveRouteSettings" class="primary-button" type="button">Save route settings</button>
+            <button id="testRoutesApi" class="secondary-button" type="button">Test Worker</button>
+            <span id="routesApiTestResult" class="field-help">Not tested.</span>
+          </div>
+          <div class="notice compact-notice">
+            <strong>Key security:</strong> the browser calls your Worker. The Google API key remains a Worker secret and is never stored in this PWA.
+          </div>
+        </article>
+
+        <article class="card full-grid-card">
+          <p class="eyebrow">Implementation status</p>
+          <h2>Route intelligence capabilities</h2>
+          <ol class="roadmap capability-list">
+            <li class="done"><strong>Traffic-aware mileage and duration:</strong> current location → pickup → customer → recovery.</li>
+            <li class="done"><strong>ETA:</strong> pickup, delivery, and return-to-zone arrival times.</li>
+            <li class="done"><strong>Alternatives:</strong> default route plus available alternatives for each route leg.</li>
+            <li class="done"><strong>Route preferences:</strong> avoid tolls, highways, and ferries.</li>
+            <li class="done"><strong>Recovery matrix:</strong> compare up to 10 destinations by traffic-aware time and mileage.</li>
+            <li class="done"><strong>Google Maps handoff:</strong> pickup, customer, staging, and complete route navigation links.</li>
+            <li class="done"><strong>Protected backend:</strong> Cloudflare Worker, origin allowlist, validation, short cache, and secret key storage.</li>
+          </ol>
         </article>
       </div>
     </section>
   </main>
 
   <footer>
-    <span>Apex Dispatch MVP</span>
-    <span>JF controls the platform and vehicle. BL provides decision support.</span>
+    <span>Apex Dispatch Routes MVP v2 · A BenDESK product</span>
+    <span>JF controls navigation, platform actions, and final driving decisions.</span>
   </footer>
 
   <script src="app.js"></script>

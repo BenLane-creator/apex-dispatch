@@ -1,11 +1,19 @@
 {
+  "id": "/",
   "name": "Apex Dispatch",
-  "short_name": "Apex Dispatch",
-  "description": "Decision support and shift tracking for the JF + BL Saturday delivery pilot.",
-  "start_url": "./index.html",
+  "short_name": "Apex",
+  "description": "A BenDESK product for traffic-aware delivery offer scoring, route planning, recovery comparison, and shift tracking.",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#0b1020",
   "theme_color": "#111827",
+  "categories": [
+    "business",
+    "navigation",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "icon.svg",

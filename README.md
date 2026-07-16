@@ -1,84 +1,154 @@
-# Apex Dispatch MVP
+# Apex Dispatch Routes MVP v2 — by BenDESK
 
-A mobile-first, offline-capable decision-support app for the JF + BL Saturday delivery pilot in St. George, Utah.
+Apex Dispatch is a BenDESK mobile-first decision-support PWA for evaluating delivery offers, calculating traffic-aware operational mileage and time, selecting recovery corridors, handing active navigation to Google Maps, and tracking shift performance.
 
-## What this version does
+## Product identity
 
-- Scores DoorDash restaurant and Shop & Deliver offers.
-- Calculates operational miles, vehicle cost, gross/net dollars per mile, and projected hourly rate.
-- Applies different thresholds for core, conditional, and outer delivery zones.
-- Generates explicit instructions for BL (dispatcher) and JF (driver).
-- Tracks shift time, breaks, earnings, miles, vehicle cost, and estimated net profit.
-- Maintains a restaurant intelligence database with A–D grades and expected wait times.
-- Exports shift records as CSV.
-- Stores data locally in the browser.
-- Can be installed as a Progressive Web App when served over HTTPS or localhost.
+- Product: **Apex Dispatch**
+- Version: **Routes MVP v2**
+- Brand: **by BenDESK**
+- App: `https://apex.benlane.us`
+- Routes API: `https://api.benlane.us`
+- Contact: `BenDESK@benlane.us`
 
-## Important operating boundary
+The application remains separate from DoorDash. It does not request DoorDash credentials, scrape the Dasher app, or accept offers automatically. JF keeps control of the platform, vehicle, navigation, and final driving decisions.
 
-This app does not log into DoorDash, store DoorDash credentials, scrape private app data, or automatically accept/decline orders. JF remains responsible for operating the DoorDash account and making the final decision in the official app.
+## Implemented route capabilities
 
-## Run locally
+- Browser GPS origin with explicit permission.
+- Address-based origin, pickup, customer, and recovery/staging locations.
+- Three-leg operational plan:
+  1. Current position → pickup
+  2. Pickup → customer
+  3. Customer → recovery/staging point
+- Traffic-aware optimal or standard traffic-aware routing.
+- Best-guess, optimistic, or pessimistic traffic model.
+- Default route plus available alternative routes for every leg.
+- Avoid-tolls, avoid-highways, and avoid-ferries preferences.
+- Total operational miles, traffic-adjusted driving time, static time, traffic delay, pickup ETA, delivery ETA, and recovery ETA.
+- Automatic transfer of calculated miles and minutes into the offer-scoring engine.
+- Revenue metrics based on route-derived operational miles and time.
+- Route geometry preview without loading a full embedded map SDK.
+- Google Maps handoff buttons for pickup, customer, recovery, and the complete route.
+- Recovery matrix comparing up to 10 destinations by traffic-aware time, mileage, delay, and ETA.
+- Optional GPS movement/time-based route refresh.
+- Route freshness and stale-data warnings.
+- CSV export containing route metrics and ETAs.
+- Offline app shell; route calculations remain online-only.
 
-From this directory:
+## Architecture
+
+```text
+Apex Dispatch PWA (GitHub Pages)
+        |
+        | HTTPS JSON requests
+        v
+Cloudflare Worker (api.benlane.us)
+        |
+        | server-side API key
+        v
+Google Routes API
+
+Navigate buttons → Google Maps app / web navigation
+```
+
+The Google API key is never placed in `app.js`. It is stored as a Cloudflare Worker secret.
+
+## Project structure
+
+```text
+index.html                 PWA interface and route controls
+styles.css                Mobile-first application styles
+app.js                    Offer scoring, GPS, route UI, navigation, matrix, storage, CSV
+manifest.webmanifest      Installable PWA metadata
+service-worker.js         Offline app-shell cache; API traffic is never cached
+icon.svg                  App icon
+CNAME                     GitHub Pages custom domain: apex.benlane.us
+worker/
+  src/index.js            Protected Routes API gateway
+  wrangler.toml           Cloudflare Worker configuration
+  package.json            Wrangler scripts
+  .dev.vars.example       Local secret template
+OPERATIONS_PLAN.md        Operating procedures
+PRODUCT_PLAN.md           Product scope and roadmap
+ROUTES_DEPLOYMENT.md      Setup and deployment procedure
+```
+
+## Local frontend test
 
 ```bash
 python3 -m http.server 8080
 ```
 
-Then open:
+Open:
 
 ```text
 http://localhost:8080
 ```
 
-Opening `index.html` directly will run most functions, but service-worker installation requires localhost or HTTPS.
+GPS works on `localhost`. On a phone or production hostname it requires valid HTTPS.
 
-## Default scoring assumptions
+## Production setup
 
-- Vehicle cost: $0.50 per operational mile.
-- Core zone: $1.75 gross per operational mile minimum.
-- Conditional zone: $2.25 gross per operational mile minimum.
-- Outer zone: $2.50 gross per operational mile minimum.
-- Minimum payout: $7.
-- Target projected gross hourly rate: $25.
-- Strong projected gross hourly rate: $30.
-- Maximum normal completion time: 30 minutes.
+Follow [`ROUTES_DEPLOYMENT.md`](ROUTES_DEPLOYMENT.md). The required sequence is:
 
-All thresholds are editable in Settings.
+1. Enable billing and the **Routes API** in Google Cloud.
+2. Create an API key restricted to the Routes API.
+3. Store the key in Cloudflare as `GOOGLE_MAPS_API_KEY`.
+4. Deploy the Worker.
+5. Attach `api.benlane.us` to the Worker or use the generated `workers.dev` URL.
+6. Deploy the frontend files to the `BenLane-creator/apex-dispatch` repository.
+7. In Apex Settings, save the Worker base URL and test it.
 
-## Operating workflow
+## Worker endpoints
 
-1. JF receives an offer in DoorDash.
-2. BL enters the offer data into Apex Dispatch.
-3. Apex Dispatch returns ACCEPT, MAYBE, or DECLINE with the supporting metrics.
-4. JF verifies the real offer details and makes the final decision in DoorDash.
-5. BL logs accepted/declined offers and records actual completion results.
-6. The team reviews restaurant, zone, mileage, and hourly performance after the shift.
+### `GET /health`
 
-## Product roadmap
+Returns Worker status without exposing the API key.
 
-### V1.1 — User-selected screenshot parsing
+### `POST /route-plan`
 
-Add image upload and on-device text extraction. This remains user-controlled and does not require DoorDash credentials.
+Calculates the pickup, delivery, and optional recovery legs.
 
-### V1.2 — Route and map support
+Example request:
 
-Accept user-entered pickup/drop-off locations and estimate return-to-zone mileage using a supported mapping provider.
+```json
+{
+  "origin": { "address": "Red Cliffs Mall, St. George, UT" },
+  "pickup": { "address": "123 Main St, St. George, UT" },
+  "dropoff": { "address": "456 River Rd, St. George, UT" },
+  "recovery": { "address": "Red Cliffs Mall, St. George, UT" },
+  "pickupWaitMinutes": 8,
+  "dropoffMinutes": 3,
+  "options": {
+    "routingPreference": "TRAFFIC_AWARE_OPTIMAL",
+    "trafficModel": "BEST_GUESS",
+    "alternatives": true,
+    "avoidTolls": false,
+    "avoidHighways": false,
+    "avoidFerries": true
+  }
+}
+```
 
-### V2 — Multi-platform scoring
+### `POST /route-matrix`
 
-Add platform-specific workflows for Uber Eats, Spark, and other shopping/delivery services.
+Compares one origin with up to 10 possible recovery destinations.
 
-### V3 — Team-specific predictions
+## Privacy and operational boundaries
 
-Use the operation's own historical records to predict restaurant wait time, destination recovery value, and expected net earnings.
+- Customer addresses and GPS coordinates are sent only to the configured Worker and Google Routes API for the requested calculation.
+- The service worker does not cache API requests or route payloads.
+- Route addresses are not written into the shift log. Logged route snapshots contain calculated mileage, time, traffic delay, and ETAs.
+- The Worker limits request size, validates coordinates, restricts browser origins, applies a best-effort 30-request-per-minute per-client guard, requests only required Google response fields, and caches identical calculations briefly to reduce duplicate API calls.
+- Avoidance options are route preferences, not guarantees.
+- Google Maps remains responsible for active turn-by-turn navigation and live rerouting while driving.
 
-## File structure
+## Cost controls
 
-- `index.html` — app layout
-- `styles.css` — mobile-first interface
-- `app.js` — scoring, storage, KPI, and export logic
-- `manifest.webmanifest` — installable app metadata
-- `service-worker.js` — offline cache
-- `icon.svg` — application icon
+- Restrict the API key to **Routes API** only.
+- Set Google Maps Platform quotas and budget alerts.
+- Keep auto-refresh disabled until production behavior and cost are observed.
+- The default route refresh threshold is three minutes and 0.4 miles of movement.
+- The Worker caches identical requests for 60 seconds and includes a best-effort per-isolate request limit. Add a Cloudflare edge rate-limiting rule for a globally enforced ceiling.
+- Traffic-on-polyline detail is disabled by default because it can increase billable computation.

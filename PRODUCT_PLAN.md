@@ -1,5 +1,7 @@
 # Apex Dispatch Product and Build Plan
 
+**A BenDESK product**
+
 ## 1. Product objective
 
 Apex Dispatch is a driver-controlled decision-support system for the JF + BL Saturday delivery operation. Its purpose is to improve offer selection, reduce unproductive mileage, preserve peak-period availability, and create a repeatable dataset for continuous optimization.
@@ -172,3 +174,22 @@ Run locally or on a private HTTPS host. Install it on BL's phone/tablet as a Pro
 - Tracks shift breaks and completed-delivery performance.
 - Exports a usable CSV.
 - Remains functional offline after installation/cache.
+
+## 10. V1.2 implementation status — Routes API edition
+
+Implemented in the accompanying application build:
+
+- Browser GPS or typed starting address
+- Pickup, customer, and recovery/staging addresses
+- Traffic-aware three-leg route planning
+- Alternative routes for each independent leg
+- Traffic delay and ETA calculation
+- Automatic route mileage/time transfer into offer scoring
+- Google Maps navigation handoff
+- Recovery destination route matrix
+- Route freshness and optional movement-based refresh
+- Protected Google Routes API access through a Cloudflare Worker
+- Worker-side API-key storage, request validation, origin restrictions, reduced field masks, and short-lived duplicate-request caching
+- Route metrics in offer logs and CSV exports without persisting customer addresses
+
+The route layer remains decision support. JF retains control of the official delivery platform, turn-by-turn navigation, and final driving decisions.

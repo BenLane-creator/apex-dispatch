@@ -2,7 +2,8 @@
   "use strict";
 
   const STORAGE_KEYS = {
-    settings: "apexDispatch.settings.v1",
+    settings: "apexDispatch.settings.v2",
+    settingsLegacy: "apexDispatch.settings.v1",
     restaurants: "apexDispatch.restaurants.v1",
     shift: "apexDispatch.shift.v1",
   };
@@ -16,36 +17,73 @@
     targetGrossHourly: 25,
     strongGrossHourly: 30,
     maxOrderMinutes: 30,
+    routesWorkerUrl: "https://api.benlane.us",
+    defaultRecoveryAddress: "Red Cliffs Mall, St. George, UT",
+    routingPreference: "TRAFFIC_AWARE_OPTIMAL",
+    trafficModel: "BEST_GUESS",
+    routeRefreshMinutes: 3,
+    routeRefreshMiles: 0.4,
+    autoRefreshRoutes: false,
+    includeTrafficPolyline: false,
   };
 
   const defaultShift = {
     state: "off",
     startedAt: null,
+    endedAt: null,
     breakStartedAt: null,
     totalBreakMs: 0,
     logs: [],
   };
 
-  let settings = loadJson(STORAGE_KEYS.settings, defaultSettings);
+  const routeState = {
+    currentPosition: null,
+    currentPositionAt: null,
+    useGpsOrigin: false,
+    matrixGpsPoint: null,
+    matrixUseGps: false,
+    plan: null,
+    inputsDirty: false,
+    calculating: false,
+    lastRouteOrigin: null,
+    watchId: null,
+    lastAutoRefreshAttempt: 0,
+  };
+
+  let settings = loadSettings();
   let restaurants = loadJson(STORAGE_KEYS.restaurants, []);
   let shift = loadJson(STORAGE_KEYS.shift, defaultShift);
   let lastOffer = null;
   let deferredInstallPrompt = null;
+  let latestMatrixResults = [];
 
   const $ = (id) => document.getElementById(id);
   const money = (value) => `$${Number(value || 0).toFixed(2)}`;
   const oneDecimal = (value) => Number(value || 0).toFixed(1);
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const routeWorkerBase = () => String(settings.routesWorkerUrl || "").trim().replace(/\/+$/, "");
+
+  function clone(value) {
+    return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value));
+  }
+
+  function loadSettings() {
+    const current = loadJson(STORAGE_KEYS.settings, null);
+    if (current) return { ...defaultSettings, ...current };
+    const legacy = loadJson(STORAGE_KEYS.settingsLegacy, {});
+    return { ...defaultSettings, ...legacy };
+  }
 
   function loadJson(key, fallback) {
     try {
       const raw = localStorage.getItem(key);
-      if (!raw) return structuredClone(fallback);
+      if (!raw) return fallback === null ? null : clone(fallback);
       const parsed = JSON.parse(raw);
-      if (Array.isArray(fallback)) return Array.isArray(parsed) ? parsed : structuredClone(fallback);
+      if (Array.isArray(fallback)) return Array.isArray(parsed) ? parsed : clone(fallback);
+      if (fallback === null) return parsed;
       return { ...fallback, ...parsed };
     } catch {
-      return structuredClone(fallback);
+      return fallback === null ? null : clone(fallback);
     }
   }
 
@@ -54,7 +92,7 @@
   }
 
   function readNumber(id, fallback = 0) {
-    const value = Number($(id).value);
+    const value = Number($(id)?.value);
     return Number.isFinite(value) ? value : fallback;
   }
 
@@ -69,6 +107,13 @@
     return settings.coreGrossPerMile;
   }
 
+  function routeIsStale() {
+    if (!routeState.plan) return true;
+    if (routeState.inputsDirty) return true;
+    const ageMinutes = (Date.now() - new Date(routeState.plan.computedAt).getTime()) / 60000;
+    return ageMinutes >= Number(settings.routeRefreshMinutes || 3);
+  }
+
   function evaluateOffer(data) {
     const operationalMiles = Math.max(0.1, data.displayedMiles + data.returnMiles);
     const restaurantIntel = getRestaurantIntel(data.merchant);
@@ -77,7 +122,10 @@
     const shoppingMinutes = data.platform.includes("Shop") ? Math.max(0, data.itemCount * 1.25) : 0;
     const stopPenaltyMinutes = Math.max(0, data.stops - 1) * 7;
     const accessPenaltyMinutes = data.apartment ? 6 : 0;
-    const totalMinutes = Math.max(1, waitMinutes + data.driveMinutes + shoppingMinutes + stopPenaltyMinutes + accessPenaltyMinutes);
+    const totalMinutes = Math.max(
+      1,
+      waitMinutes + data.driveMinutes + data.returnMinutes + shoppingMinutes + stopPenaltyMinutes + accessPenaltyMinutes,
+    );
     const vehicleCost = operationalMiles * settings.vehicleCost;
     const netBeforeTax = data.payout - vehicleCost;
     const grossPerMile = data.payout / operationalMiles;
@@ -85,6 +133,8 @@
     const grossHourly = data.payout / (totalMinutes / 60);
     const netHourly = netBeforeTax / (totalMinutes / 60);
     const requiredPerMile = zoneThreshold(data.zone);
+    const trafficDelayMinutes = routeState.plan?.totals?.trafficDelayMinutes || 0;
+    const hasFreshRoute = Boolean(routeState.plan) && !routeIsStale();
 
     let score = 50;
     score += clamp((grossPerMile - requiredPerMile) * 16, -32, 28);
@@ -104,6 +154,10 @@
     if (data.platform.includes("Shop") && data.itemCount > 20) score -= 10;
     if (data.platform.includes("Shop") && data.itemCount <= 10 && data.payout >= 15) score += 8;
     if (data.zone === "outer") score -= 7;
+    if (hasFreshRoute) score += 3;
+    if (routeState.plan && routeIsStale()) score -= 4;
+    if (trafficDelayMinutes >= 10) score -= 7;
+    else if (trafficDelayMinutes >= 5) score -= 3;
 
     score = Math.round(clamp(score, 0, 100));
 
@@ -130,29 +184,36 @@
 
     if (restaurantIntel?.grade === "A") reasons.push("Restaurant is graded A in local intelligence.");
     if (restaurantIntel?.grade === "C" || restaurantIntel?.grade === "D") risks.push(`Restaurant is graded ${restaurantIntel.grade} and carries delay risk.`);
-    if (data.returnMiles > 0) risks.push(`${oneDecimal(data.returnMiles)} estimated return miles are included.`);
+    if (data.returnMiles > 0) risks.push(`${oneDecimal(data.returnMiles)} recovery miles are included.`);
     if (data.apartment) risks.push("Access complexity may extend completion time.");
     if (data.heavyItems) risks.push("Heavy-item handling risk applies.");
     if (data.zone === "outer") risks.push("Outer-zone drop-off can reduce next-order availability.");
     if (data.platform.includes("Shop") && data.itemCount > 15) risks.push("Shopping item count may create substitution and checkout delays.");
     if (data.endsNearHome) reasons.push("Final-order positioning benefit reduces deadhead cost.");
+    if (hasFreshRoute) reasons.push("Traffic-aware route mileage and ETA are current.");
+    if (routeState.plan && routeIsStale()) risks.push("Route data is stale or the route inputs changed; refresh before relying on ETA.");
+    if (trafficDelayMinutes >= 1) risks.push(`Current traffic adds about ${oneDecimal(trafficDelayMinutes)} minutes.`);
 
     const dispatcherInstructions = [];
     const driverInstructions = [];
+    const pickupEta = routeState.plan?.totals?.pickupEta ? formatClock(routeState.plan.totals.pickupEta) : null;
+    const deliveryEta = routeState.plan?.totals?.deliveryEta ? formatClock(routeState.plan.totals.deliveryEta) : null;
+    const recoveryEta = routeState.plan?.totals?.recoveryEta ? formatClock(routeState.plan.totals.recoveryEta) : null;
 
     if (verdict === "ACCEPT") {
-      dispatcherInstructions.push("Recommend ACCEPT immediately if the route and merchant shown in DoorDash match the entered data.");
-      dispatcherInstructions.push("Set the recovery point before pickup: nearest productive restaurant cluster after drop-off.");
+      dispatcherInstructions.push("Recommend ACCEPT immediately if DoorDash matches the entered payout, pickup, and destination.");
+      if (pickupEta && deliveryEta) dispatcherInstructions.push(`Traffic estimate: pickup ${pickupEta}; delivery ${deliveryEta}${recoveryEta ? `; recovery ${recoveryEta}` : ""}.`);
+      dispatcherInstructions.push("Set the recovery point before pickup and refresh traffic if the route becomes stale.");
       dispatcherInstructions.push("Start timing the restaurant wait and update the merchant grade after completion.");
-      driverInstructions.push("JF makes the final acceptance in DoorDash and confirms the displayed route before moving.");
-      driverInstructions.push("Drive to pickup, verify the correct order, and report any delay to BL.");
+      driverInstructions.push("JF makes the final acceptance in DoorDash and confirms the official route before moving.");
+      driverInstructions.push("Use the navigation buttons only when safely parked or handled by BL.");
     } else if (verdict === "MAYBE") {
-      dispatcherInstructions.push("Recommend MAYBE: accept only if the restaurant is currently running on time and the destination does not create extra deadhead mileage.");
-      dispatcherInstructions.push("Recheck traffic, parking, and whether a stronger peak-period offer is likely within the next few minutes.");
-      driverInstructions.push("JF should accept only after confirming there are no hidden access, traffic, or route problems.");
+      dispatcherInstructions.push("Recommend MAYBE: accept only if the restaurant is on time and the destination does not add hidden access or recovery cost.");
+      dispatcherInstructions.push("Review alternative routes and current traffic before giving the instruction.");
+      driverInstructions.push("JF should accept only after confirming there are no hidden access, traffic, parking, or route problems.");
     } else {
       dispatcherInstructions.push("Recommend DECLINE and remain parked in the current productive staging area.");
-      dispatcherInstructions.push("Do not reposition solely because of this declined offer; wait for a qualifying order unless the zone has been inactive.");
+      dispatcherInstructions.push("Do not reposition solely because of this declined offer; use the destination matrix before a deliberate move.");
       driverInstructions.push("JF declines manually and maintains safe staging. Do not chase the hotspot marker without a dispatch reason.");
     }
 
@@ -174,6 +235,7 @@
       risks,
       dispatcherInstructions,
       driverInstructions,
+      route: routeState.plan ? summarizeRoutePlan(routeState.plan) : null,
     };
   }
 
@@ -187,6 +249,7 @@
       zone: $("zone").value,
       waitMinutes: readNumber("waitMinutes", 8),
       driveMinutes: readNumber("driveMinutes", 18),
+      returnMinutes: readNumber("returnMinutes", 0),
       stops: Math.max(1, readNumber("stops", 1)),
       itemCount: Math.max(0, readNumber("itemCount", 0)),
       apartment: $("apartment").checked,
@@ -233,18 +296,673 @@
     $("offerForm").reset();
     $("waitMinutes").value = 8;
     $("driveMinutes").value = 18;
+    $("returnMinutes").value = 0;
     $("stops").value = 1;
     $("itemCount").value = 0;
     $("peakWindow").checked = true;
+    $("routeAlternatives").checked = true;
+    $("avoidTolls").checked = false;
+    $("avoidHighways").checked = false;
+    $("avoidFerries").checked = true;
+    $("pickupAddress").value = "";
+    $("dropoffAddress").value = "";
+    $("recoveryAddress").value = settings.defaultRecoveryAddress || "";
     lastOffer = null;
+    clearRoutePlan();
     $("verdictBadge").textContent = "WAITING";
     $("verdictBadge").className = "verdict verdict-neutral";
-    $("decisionSummary").textContent = "Enter the offer details to calculate profitability, time efficiency, vehicle cost, and territory risk.";
+    $("decisionSummary").textContent = "Enter the offer details to calculate profitability, time efficiency, vehicle cost, traffic, and territory risk.";
     ["scoreMetric", "operationalMilesMetric", "grossPerMileMetric", "netPerMileMetric", "grossHourlyMetric", "netOrderMetric"].forEach((id) => $(id).textContent = "—");
     renderList("dispatcherInstructions", ["Enter an offer to generate the dispatch recommendation."]);
     renderList("driverInstructions", ["JF retains control of the app, vehicle, safety decisions, and final acceptance."]);
     $("logAccepted").disabled = true;
     $("logDeclined").disabled = true;
+  }
+
+  async function useCurrentLocationForOrigin() {
+    setRouteStatus("Requesting device location…", "warn");
+    try {
+      const point = await getCurrentPosition();
+      routeState.currentPosition = point;
+      routeState.currentPositionAt = Date.now();
+      routeState.useGpsOrigin = true;
+      $("originAddress").value = "";
+      $("originAddress").placeholder = `GPS ${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`;
+      $("originLocationStatus").textContent = `GPS accuracy approximately ${Math.round(point.accuracy || 0)} m. Updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`;
+      markRouteDirty("GPS origin updated. Recalculate the route.");
+      if (settings.autoRefreshRoutes) startLocationWatch();
+    } catch (error) {
+      setRouteStatus(locationErrorMessage(error), "bad");
+    }
+  }
+
+  function getCurrentPosition() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("Geolocation is not supported by this browser."));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => resolve({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy,
+        }),
+        reject,
+        { enableHighAccuracy: true, timeout: 12_000, maximumAge: 30_000 },
+      );
+    });
+  }
+
+  function locationErrorMessage(error) {
+    if (error?.code === 1) return "Location permission was denied. Enter a starting address or enable location permission.";
+    if (error?.code === 2) return "The device could not determine its location.";
+    if (error?.code === 3) return "Location request timed out. Try again outdoors or enter an address.";
+    return error?.message || "Unable to obtain device location.";
+  }
+
+  function pointForOrigin() {
+    if (routeState.useGpsOrigin && routeState.currentPosition) {
+      return {
+        latitude: routeState.currentPosition.latitude,
+        longitude: routeState.currentPosition.longitude,
+      };
+    }
+    const address = $("originAddress").value.trim();
+    return address ? { address } : null;
+  }
+
+  function pointFromAddressInput(id) {
+    const address = $(id).value.trim();
+    return address ? { address } : null;
+  }
+
+  function routeRequestOptions() {
+    return {
+      routingPreference: settings.routingPreference,
+      trafficModel: settings.trafficModel,
+      alternatives: $("routeAlternatives").checked,
+      avoidTolls: $("avoidTolls").checked,
+      avoidHighways: $("avoidHighways").checked,
+      avoidFerries: $("avoidFerries").checked,
+      includeTrafficPolyline: settings.includeTrafficPolyline,
+    };
+  }
+
+  async function calculateRoutePlan({ automatic = false } = {}) {
+    if (routeState.calculating) return;
+    const worker = routeWorkerBase();
+    if (!worker) {
+      setRouteStatus("Set the Cloudflare Worker URL in Settings.", "bad");
+      return;
+    }
+
+    let origin = pointForOrigin();
+    if (!origin) {
+      try {
+        const point = await getCurrentPosition();
+        routeState.currentPosition = point;
+        routeState.currentPositionAt = Date.now();
+        routeState.useGpsOrigin = true;
+        origin = { latitude: point.latitude, longitude: point.longitude };
+        $("originAddress").placeholder = `GPS ${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`;
+      } catch {
+        setRouteStatus("Enter a starting address or tap Use GPS.", "bad");
+        return;
+      }
+    }
+
+    const pickup = pointFromAddressInput("pickupAddress");
+    const dropoff = pointFromAddressInput("dropoffAddress");
+    const recovery = pointFromAddressInput("recoveryAddress");
+    if (!pickup || !dropoff) {
+      setRouteStatus("Pickup and customer addresses are required.", "bad");
+      return;
+    }
+
+    routeState.calculating = true;
+    setButtonLoading("calculateRoute", true);
+    $("refreshRoute").disabled = true;
+    setRouteStatus(automatic ? "Auto-refreshing traffic…" : "Calculating traffic-aware routes and alternatives…", "warn");
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25_000);
+    try {
+      const response = await fetch(`${worker}/route-plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          origin,
+          pickup,
+          dropoff,
+          recovery,
+          pickupWaitMinutes: readNumber("waitMinutes", 8),
+          dropoffMinutes: $("apartment").checked ? 7 : 3,
+          options: routeRequestOptions(),
+        }),
+      });
+      const payload = await parseJsonResponse(response);
+      if (!response.ok) throw new Error(payload?.error || `Route service returned ${response.status}.`);
+
+      routeState.plan = payload;
+      routeState.inputsDirty = false;
+      routeState.lastRouteOrigin = origin;
+      applyRoutePlanToOffer(payload);
+      renderRoutePlan();
+      setRouteStatus(`Route calculated at ${formatClock(payload.computedAt)}. Mileage and time fields were updated.`, "good");
+      if (readNumber("payout") > 0) renderOfferResult(evaluateOffer(readOfferForm()));
+      if (settings.autoRefreshRoutes) startLocationWatch();
+    } catch (error) {
+      const message = error?.name === "AbortError" ? "Route request timed out." : error?.message || "Route request failed.";
+      setRouteStatus(message, "bad");
+    } finally {
+      clearTimeout(timeout);
+      routeState.calculating = false;
+      setButtonLoading("calculateRoute", false);
+      $("refreshRoute").disabled = !routeState.plan;
+      renderRouteFreshness();
+    }
+  }
+
+  async function parseJsonResponse(response) {
+    const text = await response.text();
+    try {
+      return text ? JSON.parse(text) : {};
+    } catch {
+      return { error: text || "Invalid response from route service." };
+    }
+  }
+
+  function applyRoutePlanToOffer(plan) {
+    const pickup = defaultRoute(plan?.legs?.toPickup);
+    const dropoff = defaultRoute(plan?.legs?.toDropoff);
+    const recovery = defaultRoute(plan?.legs?.toRecovery);
+    if (!pickup || !dropoff) return;
+
+    $("displayedMiles").value = (pickup.miles + dropoff.miles).toFixed(1);
+    $("returnMiles").value = recovery ? recovery.miles.toFixed(1) : "0.0";
+    $("driveMinutes").value = Math.ceil((pickup.durationSeconds + dropoff.durationSeconds) / 60);
+    $("returnMinutes").value = recovery ? Math.ceil(recovery.durationSeconds / 60) : 0;
+  }
+
+  function defaultRoute(leg) {
+    return leg?.routes?.[0] || null;
+  }
+
+  function summarizeRoutePlan(plan) {
+    return {
+      computedAt: plan.computedAt,
+      stale: routeIsStale(),
+      pickupMiles: defaultRoute(plan.legs?.toPickup)?.miles || 0,
+      pickupMinutes: defaultRoute(plan.legs?.toPickup)?.minutes || 0,
+      dropoffMiles: defaultRoute(plan.legs?.toDropoff)?.miles || 0,
+      dropoffMinutes: defaultRoute(plan.legs?.toDropoff)?.minutes || 0,
+      recoveryMiles: defaultRoute(plan.legs?.toRecovery)?.miles || 0,
+      recoveryMinutes: defaultRoute(plan.legs?.toRecovery)?.minutes || 0,
+      trafficDelayMinutes: plan.totals?.trafficDelayMinutes || 0,
+      pickupEta: plan.totals?.pickupEta || null,
+      deliveryEta: plan.totals?.deliveryEta || null,
+      recoveryEta: plan.totals?.recoveryEta || null,
+    };
+  }
+
+  function renderRoutePlan() {
+    const plan = routeState.plan;
+    if (!plan) {
+      clearRouteMetrics();
+      return;
+    }
+
+    const pickup = defaultRoute(plan.legs?.toPickup);
+    const dropoff = defaultRoute(plan.legs?.toDropoff);
+    const recovery = defaultRoute(plan.legs?.toRecovery);
+    $("pickupRouteMetric").textContent = routeMetricText(pickup);
+    $("dropoffRouteMetric").textContent = routeMetricText(dropoff);
+    $("recoveryRouteMetric").textContent = recovery ? routeMetricText(recovery) : "Not included";
+    $("trafficDelayMetric").textContent = `${oneDecimal(plan.totals?.trafficDelayMinutes || 0)} min`;
+    $("pickupEtaMetric").textContent = formatClock(plan.totals?.pickupEta);
+    $("deliveryEtaMetric").textContent = formatClock(plan.totals?.deliveryEta);
+    $("recoveryEtaMetric").textContent = plan.totals?.recoveryEta ? formatClock(plan.totals.recoveryEta) : "—";
+    $("totalRouteMetric").textContent = `${oneDecimal(plan.totals?.miles || 0)} mi / ${Math.ceil(plan.totals?.minutes || 0)} min`;
+
+    renderAlternatives(plan);
+    drawRoutePreview(plan);
+    $("refreshRoute").disabled = false;
+    $("openFullRoute").disabled = false;
+    $("navigatePickup").disabled = false;
+    $("navigateDropoff").disabled = false;
+    $("navigateRecovery").disabled = !pointFromAddressInput("recoveryAddress");
+    renderRouteFreshness();
+  }
+
+  function routeMetricText(route) {
+    if (!route) return "—";
+    return `${oneDecimal(route.miles)} mi / ${Math.ceil(route.minutes)} min`;
+  }
+
+  function clearRoutePlan() {
+    routeState.plan = null;
+    routeState.inputsDirty = false;
+    routeState.lastRouteOrigin = null;
+    clearRouteMetrics();
+    setRouteStatus("Set the Worker URL in Settings, then enter pickup and drop-off locations.", "");
+  }
+
+  function clearRouteMetrics() {
+    [
+      "pickupRouteMetric", "dropoffRouteMetric", "recoveryRouteMetric", "trafficDelayMetric",
+      "pickupEtaMetric", "deliveryEtaMetric", "recoveryEtaMetric", "totalRouteMetric",
+    ].forEach((id) => { $(id).textContent = "—"; });
+    $("routeAlternativesPanel").innerHTML = '<p class="empty-state compact-empty">Calculate a route to compare traffic-aware alternatives.</p>';
+    $("routePreviewWrap").hidden = true;
+    $("routePreview").replaceChildren();
+    $("refreshRoute").disabled = true;
+    $("openFullRoute").disabled = true;
+    $("navigatePickup").disabled = true;
+    $("navigateDropoff").disabled = true;
+    $("navigateRecovery").disabled = true;
+    renderRouteFreshness();
+  }
+
+  function renderAlternatives(plan) {
+    const panel = $("routeAlternativesPanel");
+    panel.innerHTML = "";
+    const groups = [
+      ["To pickup", plan.legs?.toPickup],
+      ["Pickup to customer", plan.legs?.toDropoff],
+      ["Customer to recovery", plan.legs?.toRecovery],
+    ].filter(([, leg]) => leg?.routes?.length);
+
+    groups.forEach(([label, leg]) => {
+      const group = document.createElement("div");
+      group.className = "route-leg-group";
+      const heading = document.createElement("h4");
+      heading.textContent = label;
+      group.appendChild(heading);
+      const list = document.createElement("div");
+      list.className = "route-option-list";
+      leg.routes.forEach((route, index) => {
+        const option = document.createElement("div");
+        option.className = `route-option${index === 0 ? " default" : ""}`;
+        const copy = document.createElement("div");
+        const title = document.createElement("div");
+        title.className = "route-option-title";
+        title.textContent = index === 0 ? "Best route" : `Alternative ${index}`;
+        const detail = document.createElement("div");
+        detail.className = "route-option-detail";
+        const warnings = route.warnings?.length ? ` · ${route.warnings.join("; ")}` : "";
+        const traffic = route.trafficDelayMinutes > 0 ? ` · +${oneDecimal(route.trafficDelayMinutes)} min traffic` : " · no measured delay";
+        detail.textContent = `${route.description || "Route option"}${traffic}${warnings}`;
+        copy.append(title, detail);
+        const values = document.createElement("div");
+        values.className = "route-option-values";
+        values.textContent = `${oneDecimal(route.miles)} mi · ${Math.ceil(route.minutes)} min · ${formatClock(route.arrivalTime)}`;
+        option.append(copy, values);
+        list.appendChild(option);
+      });
+      group.appendChild(list);
+      panel.appendChild(group);
+    });
+  }
+
+  function drawRoutePreview(plan) {
+    const svg = $("routePreview");
+    svg.replaceChildren();
+    const legPolylines = [
+      defaultRoute(plan.legs?.toPickup)?.encodedPolyline,
+      defaultRoute(plan.legs?.toDropoff)?.encodedPolyline,
+      defaultRoute(plan.legs?.toRecovery)?.encodedPolyline,
+    ].filter(Boolean).map(decodePolyline).filter((points) => points.length > 1);
+
+    if (!legPolylines.length) {
+      $("routePreviewWrap").hidden = true;
+      return;
+    }
+
+    const all = legPolylines.flat();
+    const lats = all.map((point) => point.latitude);
+    const lngs = all.map((point) => point.longitude);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const width = 560;
+    const height = 220;
+    const padding = 22;
+    const latSpan = Math.max(0.00001, maxLat - minLat);
+    const lngSpan = Math.max(0.00001, maxLng - minLng);
+    const project = (point) => ({
+      x: padding + ((point.longitude - minLng) / lngSpan) * (width - padding * 2),
+      y: height - padding - ((point.latitude - minLat) / latSpan) * (height - padding * 2),
+    });
+    const ns = "http://www.w3.org/2000/svg";
+    const classNames = ["route-line", "route-line secondary", "route-line tertiary"];
+
+    legPolylines.forEach((line, index) => {
+      const polyline = document.createElementNS(ns, "polyline");
+      polyline.setAttribute("class", classNames[index] || "route-line");
+      polyline.setAttribute("points", line.map((point) => {
+        const projected = project(point);
+        return `${projected.x.toFixed(1)},${projected.y.toFixed(1)}`;
+      }).join(" "));
+      svg.appendChild(polyline);
+    });
+
+    const markerPoints = [
+      { point: legPolylines[0][0], label: "Start" },
+      { point: legPolylines[0].at(-1), label: "Pickup" },
+      { point: legPolylines[1]?.at(-1), label: "Customer" },
+      { point: legPolylines[2]?.at(-1), label: "Recovery" },
+    ].filter((entry) => entry.point);
+
+    markerPoints.forEach(({ point, label }) => {
+      const projected = project(point);
+      const circle = document.createElementNS(ns, "circle");
+      circle.setAttribute("class", "route-node");
+      circle.setAttribute("cx", projected.x);
+      circle.setAttribute("cy", projected.y);
+      circle.setAttribute("r", 6);
+      const text = document.createElementNS(ns, "text");
+      text.setAttribute("class", "route-node-label");
+      text.setAttribute("x", Math.min(width - 70, projected.x + 8));
+      text.setAttribute("y", Math.max(14, projected.y - 8));
+      text.textContent = label;
+      svg.append(circle, text);
+    });
+
+    $("routePreviewWrap").hidden = false;
+  }
+
+  function decodePolyline(encoded) {
+    const points = [];
+    let index = 0;
+    let lat = 0;
+    let lng = 0;
+    while (index < encoded.length) {
+      let result = 0;
+      let shiftBits = 0;
+      let byte;
+      do {
+        byte = encoded.charCodeAt(index++) - 63;
+        result |= (byte & 0x1f) << shiftBits;
+        shiftBits += 5;
+      } while (byte >= 0x20 && index < encoded.length);
+      const deltaLat = result & 1 ? ~(result >> 1) : result >> 1;
+      lat += deltaLat;
+
+      result = 0;
+      shiftBits = 0;
+      do {
+        byte = encoded.charCodeAt(index++) - 63;
+        result |= (byte & 0x1f) << shiftBits;
+        shiftBits += 5;
+      } while (byte >= 0x20 && index < encoded.length);
+      const deltaLng = result & 1 ? ~(result >> 1) : result >> 1;
+      lng += deltaLng;
+      points.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+    }
+    return points;
+  }
+
+  function renderRouteFreshness() {
+    const badge = $("routeFreshnessBadge");
+    const resultAge = $("routeResultAge");
+    if (!routeState.plan) {
+      badge.textContent = "No route";
+      badge.className = "mini-pill neutral";
+      resultAge.textContent = "Not calculated";
+      resultAge.className = "mini-pill neutral";
+      return;
+    }
+
+    const ageMs = Date.now() - new Date(routeState.plan.computedAt).getTime();
+    const ageMinutes = Math.max(0, ageMs / 60000);
+    const stale = routeIsStale();
+    const text = routeState.inputsDirty ? "Inputs changed" : stale ? `${Math.floor(ageMinutes)} min old` : "Current";
+    badge.textContent = text;
+    badge.className = `mini-pill ${stale ? "warn" : "good"}`;
+    resultAge.textContent = ageMinutes < 1 ? "Just now" : `${Math.floor(ageMinutes)} min ago`;
+    resultAge.className = `mini-pill ${stale ? "warn" : "good"}`;
+  }
+
+  function markRouteDirty(message = "Route inputs changed. Refresh before relying on ETA.") {
+    if (routeState.plan) routeState.inputsDirty = true;
+    renderRouteFreshness();
+    if (routeState.plan) setRouteStatus(message, "warn");
+  }
+
+  function setRouteStatus(message, type = "") {
+    const element = $("routeStatusMessage");
+    element.textContent = message;
+    element.className = `route-status${type ? ` ${type}` : ""}`;
+  }
+
+  function setButtonLoading(id, loading) {
+    const button = $(id);
+    if (!button) return;
+    button.classList.toggle("loading-button", loading);
+    button.disabled = loading;
+  }
+
+  function formatClock(value) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+
+  function openNavigation(destinationPoint) {
+    if (!destinationPoint) return;
+    const url = new URL("https://www.google.com/maps/dir/");
+    url.searchParams.set("api", "1");
+    url.searchParams.set("destination", mapPointValue(destinationPoint));
+    url.searchParams.set("travelmode", "driving");
+    url.searchParams.set("dir_action", "navigate");
+    const avoids = selectedAvoids();
+    if (avoids.length) url.searchParams.set("avoid", avoids.join(","));
+    window.open(url.toString(), "_blank", "noopener,noreferrer");
+  }
+
+  function openCompleteRoute() {
+    const origin = pointForOrigin();
+    const pickup = pointFromAddressInput("pickupAddress");
+    const dropoff = pointFromAddressInput("dropoffAddress");
+    const recovery = pointFromAddressInput("recoveryAddress");
+    if (!pickup || !dropoff) return;
+
+    const url = new URL("https://www.google.com/maps/dir/");
+    url.searchParams.set("api", "1");
+    if (origin) url.searchParams.set("origin", mapPointValue(origin));
+    url.searchParams.set("travelmode", "driving");
+    const waypoints = recovery ? [pickup, dropoff] : [pickup];
+    url.searchParams.set("destination", mapPointValue(recovery || dropoff));
+    url.searchParams.set("waypoints", waypoints.map(mapPointValue).join("|"));
+    const avoids = selectedAvoids();
+    if (avoids.length) url.searchParams.set("avoid", avoids.join(","));
+    window.open(url.toString(), "_blank", "noopener,noreferrer");
+  }
+
+  function mapPointValue(point) {
+    if (point.address) return point.address;
+    return `${point.latitude},${point.longitude}`;
+  }
+
+  function selectedAvoids() {
+    const values = [];
+    if ($("avoidFerries").checked) values.push("ferries");
+    if ($("avoidHighways").checked) values.push("highways");
+    if ($("avoidTolls").checked) values.push("tolls");
+    return values;
+  }
+
+  function startLocationWatch() {
+    if (!settings.autoRefreshRoutes || !navigator.geolocation || routeState.watchId !== null) return;
+    routeState.watchId = navigator.geolocation.watchPosition(
+      ({ coords }) => {
+        const next = { latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy };
+        routeState.currentPosition = next;
+        routeState.currentPositionAt = Date.now();
+        if (routeState.useGpsOrigin) maybeAutoRefresh(next);
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 30_000, timeout: 15_000 },
+    );
+  }
+
+  function stopLocationWatch() {
+    if (routeState.watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(routeState.watchId);
+    routeState.watchId = null;
+  }
+
+  function maybeAutoRefresh(current) {
+    if (!routeState.plan || !routeState.lastRouteOrigin || routeState.calculating) return;
+    if (!Number.isFinite(routeState.lastRouteOrigin.latitude)) return;
+    const movedMiles = haversineMiles(routeState.lastRouteOrigin, current);
+    const ageMinutes = (Date.now() - new Date(routeState.plan.computedAt).getTime()) / 60000;
+    const enoughTime = ageMinutes >= Number(settings.routeRefreshMinutes || 3);
+    const enoughMovement = movedMiles >= Number(settings.routeRefreshMiles || 0.4);
+    const cooldown = Date.now() - routeState.lastAutoRefreshAttempt >= 120_000;
+    if (enoughTime && enoughMovement && cooldown) {
+      routeState.lastAutoRefreshAttempt = Date.now();
+      calculateRoutePlan({ automatic: true });
+    }
+  }
+
+  function haversineMiles(a, b) {
+    const toRadians = (degrees) => degrees * Math.PI / 180;
+    const earthMiles = 3958.7613;
+    const dLat = toRadians(b.latitude - a.latitude);
+    const dLng = toRadians(b.longitude - a.longitude);
+    const lat1 = toRadians(a.latitude);
+    const lat2 = toRadians(b.latitude);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    return earthMiles * 2 * Math.asin(Math.sqrt(h));
+  }
+
+  async function testRoutesApi({ silent = false } = {}) {
+    const worker = routeWorkerBase();
+    if (!worker) {
+      setApiStatus("Routes not configured", "off");
+      if (!silent) $("routesApiTestResult").textContent = "Enter a Worker URL first.";
+      return;
+    }
+    if (!silent) $("routesApiTestResult").textContent = "Testing…";
+    try {
+      const response = await fetch(`${worker}/health`, { cache: "no-store" });
+      const payload = await parseJsonResponse(response);
+      if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+      if (!payload.routesApiConfigured) {
+        setApiStatus("Worker missing key", "break");
+        if (!silent) $("routesApiTestResult").textContent = "Worker is live, but GOOGLE_MAPS_API_KEY is missing.";
+        return;
+      }
+      setApiStatus("Routes ready", "on");
+      if (!silent) $("routesApiTestResult").textContent = `Worker ready at ${formatClock(payload.timestamp)}.`;
+    } catch (error) {
+      setApiStatus("Routes offline", "off");
+      if (!silent) $("routesApiTestResult").textContent = error.message || "Worker test failed.";
+    }
+  }
+
+  function setApiStatus(text, state) {
+    const status = $("routeApiStatus");
+    status.textContent = text;
+    status.className = `status-pill status-${state}`;
+  }
+
+  async function compareDestinations(event) {
+    event.preventDefault();
+    const worker = routeWorkerBase();
+    if (!worker) {
+      setMatrixStatus("Set the Worker URL in Settings.", "bad");
+      return;
+    }
+
+    let origin = null;
+    if (routeState.matrixUseGps && routeState.matrixGpsPoint) {
+      origin = { latitude: routeState.matrixGpsPoint.latitude, longitude: routeState.matrixGpsPoint.longitude };
+    } else {
+      const value = $("matrixOrigin").value.trim();
+      if (value) origin = { address: value };
+    }
+    if (!origin) {
+      setMatrixStatus("Enter a matrix origin or use GPS.", "bad");
+      return;
+    }
+
+    const destinations = $("matrixDestinations").value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, 10)
+      .map((address) => ({ label: address, point: { address } }));
+    if (!destinations.length) {
+      setMatrixStatus("Enter at least one destination.", "bad");
+      return;
+    }
+
+    setButtonLoading("compareDestinations", true);
+    setMatrixStatus("Comparing traffic-aware routes…", "warn");
+    try {
+      const response = await fetch(`${worker}/route-matrix`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origin, destinations, options: routeRequestOptions() }),
+      });
+      const payload = await parseJsonResponse(response);
+      if (!response.ok) throw new Error(payload.error || `Route matrix returned ${response.status}.`);
+      latestMatrixResults = payload.results || [];
+      renderMatrixResults();
+      setMatrixStatus(`Compared ${latestMatrixResults.length} destinations at ${formatClock(payload.computedAt)}.`, "good");
+    } catch (error) {
+      setMatrixStatus(error.message || "Route matrix failed.", "bad");
+    } finally {
+      setButtonLoading("compareDestinations", false);
+    }
+  }
+
+  function renderMatrixResults() {
+    const body = $("matrixResultsBody");
+    body.innerHTML = "";
+    if (!latestMatrixResults.length) {
+      body.innerHTML = '<tr><td colspan="7" class="empty-state">No route matrix results.</td></tr>';
+      return;
+    }
+    latestMatrixResults.forEach((entry, index) => {
+      const tr = document.createElement("tr");
+      const exists = entry.condition === "ROUTE_EXISTS";
+      tr.innerHTML = `
+        <td>${index + 1}</td>
+        <td>${escapeHtml(entry.label)}</td>
+        <td>${exists ? oneDecimal(entry.miles) : "—"}</td>
+        <td>${exists ? `${Math.ceil(entry.minutes)} min` : "No route"}</td>
+        <td>${exists ? `+${oneDecimal(entry.trafficDelayMinutes)} min` : "—"}</td>
+        <td>${exists ? formatClock(entry.arrivalTime) : "—"}</td>
+        <td><button class="text-button use-matrix-recovery" data-index="${index}" ${exists ? "" : "disabled"}>Use recovery</button></td>
+      `;
+      body.appendChild(tr);
+    });
+  }
+
+  function setMatrixStatus(message, type = "") {
+    const status = $("matrixStatus");
+    status.textContent = message;
+    status.className = `route-status${type ? ` ${type}` : ""}`;
+  }
+
+  async function matrixUseGps() {
+    setMatrixStatus("Requesting GPS…", "warn");
+    try {
+      const point = await getCurrentPosition();
+      routeState.matrixGpsPoint = point;
+      routeState.matrixUseGps = true;
+      $("matrixOrigin").value = "";
+      $("matrixOrigin").placeholder = `GPS ${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`;
+      setMatrixStatus("GPS selected as the matrix origin.", "good");
+    } catch (error) {
+      setMatrixStatus(locationErrorMessage(error), "bad");
+    }
   }
 
   function addOfferLog(status) {
@@ -264,6 +982,7 @@
       estimatedNet: lastOffer.netBeforeTax,
       score: lastOffer.score,
       verdict: lastOffer.verdict,
+      route: lastOffer.route,
     };
     shift.logs.unshift(entry);
     saveShift();
@@ -283,6 +1002,7 @@
       net: data.payout - data.miles * settings.vehicleCost,
       score: null,
       verdict: "ACTUAL",
+      route: null,
     };
     shift.logs.unshift(entry);
     saveShift();
@@ -388,7 +1108,6 @@
         text: `Mileage discipline: ${oneDecimal(totals.miles)} miles against ${money(totals.gross)} gross.`,
       });
     }
-
     $("kpiAlerts").innerHTML = alerts.map((alert) => `<div class="alert ${alert.type}">${escapeHtml(alert.text)}</div>`).join("");
   }
 
@@ -414,13 +1133,53 @@
   }
 
   function populateSettings() {
-    Object.keys(defaultSettings).forEach((key) => {
-      if ($(key)) $(key).value = settings[key];
-    });
+    const valueIds = [
+      "vehicleCost", "coreGrossPerMile", "conditionalGrossPerMile", "outerGrossPerMile",
+      "minimumPayout", "targetGrossHourly", "strongGrossHourly", "maxOrderMinutes",
+      "routesWorkerUrl", "defaultRecoveryAddress", "routingPreference", "trafficModel",
+      "routeRefreshMinutes", "routeRefreshMiles",
+    ];
+    valueIds.forEach((key) => { if ($(key)) $(key).value = settings[key] ?? ""; });
+    $("autoRefreshRoutes").checked = Boolean(settings.autoRefreshRoutes);
+    $("includeTrafficPolyline").checked = Boolean(settings.includeTrafficPolyline);
+    $("recoveryAddress").value = settings.defaultRecoveryAddress || "";
+  }
+
+  function saveAllSettings() {
+    settings = {
+      ...settings,
+      vehicleCost: readNumber("vehicleCost", defaultSettings.vehicleCost),
+      coreGrossPerMile: readNumber("coreGrossPerMile", defaultSettings.coreGrossPerMile),
+      conditionalGrossPerMile: readNumber("conditionalGrossPerMile", defaultSettings.conditionalGrossPerMile),
+      outerGrossPerMile: readNumber("outerGrossPerMile", defaultSettings.outerGrossPerMile),
+      minimumPayout: readNumber("minimumPayout", defaultSettings.minimumPayout),
+      targetGrossHourly: readNumber("targetGrossHourly", defaultSettings.targetGrossHourly),
+      strongGrossHourly: readNumber("strongGrossHourly", defaultSettings.strongGrossHourly),
+      maxOrderMinutes: readNumber("maxOrderMinutes", defaultSettings.maxOrderMinutes),
+      routesWorkerUrl: $("routesWorkerUrl").value.trim().replace(/\/+$/, ""),
+      defaultRecoveryAddress: $("defaultRecoveryAddress").value.trim(),
+      routingPreference: $("routingPreference").value,
+      trafficModel: $("trafficModel").value,
+      routeRefreshMinutes: clamp(readNumber("routeRefreshMinutes", 3), 1, 30),
+      routeRefreshMiles: clamp(readNumber("routeRefreshMiles", 0.4), 0.1, 5),
+      autoRefreshRoutes: $("autoRefreshRoutes").checked,
+      includeTrafficPolyline: $("includeTrafficPolyline").checked,
+    };
+    saveJson(STORAGE_KEYS.settings, settings);
+    if (!settings.autoRefreshRoutes) stopLocationWatch();
+    else if (routeState.useGpsOrigin) startLocationWatch();
+    if (!$("recoveryAddress").value.trim()) $("recoveryAddress").value = settings.defaultRecoveryAddress;
+    renderShift();
+    testRoutesApi({ silent: true });
   }
 
   function exportCsv() {
-    const headers = ["timestamp", "status", "merchant", "payout", "offered_payout", "miles", "minutes", "estimated_net", "score", "verdict"];
+    const headers = [
+      "timestamp", "status", "merchant", "payout", "offered_payout", "miles", "minutes", "estimated_net",
+      "score", "verdict", "route_computed_at", "route_stale", "pickup_miles", "pickup_minutes",
+      "dropoff_miles", "dropoff_minutes", "recovery_miles", "recovery_minutes", "traffic_delay_minutes",
+      "pickup_eta", "delivery_eta", "recovery_eta",
+    ];
     const rows = shift.logs.map((entry) => [
       new Date(entry.timestamp).toISOString(),
       entry.status,
@@ -432,6 +1191,18 @@
       entry.net,
       entry.score ?? "",
       entry.verdict,
+      entry.route?.computedAt || "",
+      entry.route?.stale ?? "",
+      entry.route?.pickupMiles ?? "",
+      entry.route?.pickupMinutes ?? "",
+      entry.route?.dropoffMiles ?? "",
+      entry.route?.dropoffMinutes ?? "",
+      entry.route?.recoveryMiles ?? "",
+      entry.route?.recoveryMinutes ?? "",
+      entry.route?.trafficDelayMinutes ?? "",
+      entry.route?.pickupEta || "",
+      entry.route?.deliveryEta || "",
+      entry.route?.recoveryEta || "",
     ]);
     const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -457,14 +1228,14 @@
       .replaceAll("'", "&#039;");
   }
 
+  function activateTab(tabName) {
+    document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === tabName));
+    document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.toggle("active", panel.id === tabName));
+  }
+
   function setupTabs() {
     document.querySelectorAll(".tab").forEach((button) => {
-      button.addEventListener("click", () => {
-        document.querySelectorAll(".tab").forEach((tab) => tab.classList.remove("active"));
-        document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.remove("active"));
-        button.classList.add("active");
-        $(button.dataset.tab).classList.add("active");
-      });
+      button.addEventListener("click", () => activateTab(button.dataset.tab));
     });
   }
 
@@ -476,6 +1247,29 @@
     $("resetOffer").addEventListener("click", resetOfferForm);
     $("logAccepted").addEventListener("click", () => addOfferLog("Accepted"));
     $("logDeclined").addEventListener("click", () => addOfferLog("Declined"));
+
+    $("useCurrentLocation").addEventListener("click", useCurrentLocationForOrigin);
+    $("calculateRoute").addEventListener("click", () => calculateRoutePlan());
+    $("refreshRoute").addEventListener("click", () => calculateRoutePlan());
+    $("useDefaultRecovery").addEventListener("click", () => {
+      $("recoveryAddress").value = settings.defaultRecoveryAddress || "";
+      markRouteDirty();
+    });
+    $("openFullRoute").addEventListener("click", openCompleteRoute);
+    $("navigatePickup").addEventListener("click", () => openNavigation(pointFromAddressInput("pickupAddress")));
+    $("navigateDropoff").addEventListener("click", () => openNavigation(pointFromAddressInput("dropoffAddress")));
+    $("navigateRecovery").addEventListener("click", () => openNavigation(pointFromAddressInput("recoveryAddress")));
+
+    ["pickupAddress", "dropoffAddress", "recoveryAddress", "waitMinutes"].forEach((id) => {
+      $(id).addEventListener("input", () => markRouteDirty());
+    });
+    ["routeAlternatives", "avoidTolls", "avoidHighways", "avoidFerries"].forEach((id) => {
+      $(id).addEventListener("change", () => markRouteDirty("Route preferences changed. Recalculate the route."));
+    });
+    $("originAddress").addEventListener("input", () => {
+      routeState.useGpsOrigin = false;
+      markRouteDirty();
+    });
 
     $("startShift").addEventListener("click", () => {
       shift = { ...defaultShift, state: "active", startedAt: Date.now(), logs: shift.logs || [] };
@@ -543,16 +1337,41 @@
 
     $("settingsForm").addEventListener("submit", (event) => {
       event.preventDefault();
-      settings = Object.fromEntries(Object.keys(defaultSettings).map((key) => [key, readNumber(key, defaultSettings[key])]));
-      saveJson(STORAGE_KEYS.settings, settings);
-      renderShift();
+      saveAllSettings();
       alert("Settings saved.");
+    });
+    $("saveRouteSettings").addEventListener("click", () => {
+      saveAllSettings();
+      alert("Route settings saved.");
+    });
+    $("testRoutesApi").addEventListener("click", () => {
+      settings.routesWorkerUrl = $("routesWorkerUrl").value.trim().replace(/\/+$/, "");
+      testRoutesApi();
+    });
+
+    $("matrixForm").addEventListener("submit", compareDestinations);
+    $("matrixUseDropoff").addEventListener("click", () => {
+      routeState.matrixUseGps = false;
+      $("matrixOrigin").value = $("dropoffAddress").value.trim();
+      setMatrixStatus($("matrixOrigin").value ? "Current drop-off copied as matrix origin." : "No current drop-off address is entered.", $("matrixOrigin").value ? "good" : "warn");
+    });
+    $("matrixUseGps").addEventListener("click", matrixUseGps);
+    $("matrixOrigin").addEventListener("input", () => { routeState.matrixUseGps = false; });
+    $("matrixResultsBody").addEventListener("click", (event) => {
+      const button = event.target.closest(".use-matrix-recovery");
+      if (!button) return;
+      const result = latestMatrixResults[Number(button.dataset.index)];
+      if (!result?.point?.address) return;
+      $("recoveryAddress").value = result.point.address;
+      markRouteDirty("Recovery point selected from the route matrix. Recalculate the offer route.");
+      activateTab("dispatch");
+      setRouteStatus(`Recovery set to ${result.label}. Recalculate the route.`, "good");
     });
 
     $("exportCsv").addEventListener("click", exportCsv);
     $("clearShiftData").addEventListener("click", () => {
       if (!confirm("Clear all current shift logs and timers?")) return;
-      shift = structuredClone(defaultShift);
+      shift = clone(defaultShift);
       saveShift();
       renderShift();
     });
@@ -577,7 +1396,11 @@
   renderRestaurants();
   renderShift();
   resetOfferForm();
-  setInterval(renderShift, 30000);
+  testRoutesApi({ silent: true });
+  setInterval(() => {
+    renderShift();
+    renderRouteFreshness();
+  }, 30_000);
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => navigator.serviceWorker.register("service-worker.js").catch(() => {}));
