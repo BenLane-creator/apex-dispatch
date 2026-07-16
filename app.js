@@ -142,6 +142,8 @@
     lastPositionAt: 0,
   };
 
+  const clone = (value) => typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value));
+
   let settings = loadJson(STORAGE_KEYS.settings, defaultSettings);
   let recoveryPoints = loadJson(STORAGE_KEYS.recovery, defaultRecoveryPoints);
   let shift = loadJson(STORAGE_KEYS.shift, defaultShift);
@@ -151,7 +153,6 @@
   let recoveryEditCoordinates = null;
 
   const $ = (id) => document.getElementById(id);
-  const clone = (value) => typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value));
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const money = (value) => new Intl.NumberFormat(settings.language === "es-NI" ? "es-NI" : "en-US", { style: "currency", currency: "USD" }).format(Number(value || 0));
   const oneDecimal = (value) => Number(value || 0).toFixed(1);

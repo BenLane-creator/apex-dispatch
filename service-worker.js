@@ -1,4 +1,4 @@
-const CACHE_NAME = "apex-dispatch-v3-bendesk-1";
+const CACHE_NAME = "apex-dispatch-v3-bendesk-2";
 const APP_SHELL = [
   "./",
   "./index.html",
