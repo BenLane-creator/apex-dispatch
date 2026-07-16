@@ -1,9 +1,6 @@
-# Apex Dispatch Brand Specification
+# Branding
 
-- Primary product name: **Apex Dispatch**
-- Product line: **Apex Dispatch Routes MVP v2**
-- Byline: **by BenDESK**
-- Footer: **Apex Dispatch Routes MVP v2 · A BenDESK product**
-- App URL: `https://apex.benlane.us`
-- API URL: `https://api.benlane.us`
-- Email: `BenDESK@benlane.us`
+- Product: **Apex Dispatch**
+- Attribution: **by BenDESK**
+- Release: **Apex Dispatch v3**
+- Public interface rule: display only Apex Dispatch and BenDESK product branding

@@ -2,18 +2,15 @@
   "id": "/",
   "name": "Apex Dispatch",
   "short_name": "Apex",
-  "description": "A BenDESK product for traffic-aware delivery offer scoring, route planning, recovery comparison, and shift tracking.",
+  "description": "A BenDESK product for bilingual route intelligence, exact recovery guidance, voice alerts, and delivery offer scoring.",
+  "lang": "en",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#0b1020",
-  "theme_color": "#111827",
-  "categories": [
-    "business",
-    "navigation",
-    "productivity"
-  ],
+  "background_color": "#080d19",
+  "theme_color": "#0b1020",
+  "categories": ["business", "navigation", "productivity"],
   "icons": [
     {
       "src": "icon.svg",

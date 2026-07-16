@@ -18,6 +18,13 @@ const ROUTE_FIELD_MASK = [
   "routes.legs.startLocation",
   "routes.legs.endLocation",
   "routes.legs.travelAdvisory.speedReadingIntervals",
+  "routes.legs.steps.distanceMeters",
+  "routes.legs.steps.staticDuration",
+  "routes.legs.steps.polyline.encodedPolyline",
+  "routes.legs.steps.startLocation",
+  "routes.legs.steps.endLocation",
+  "routes.legs.steps.navigationInstruction.maneuver",
+  "routes.legs.steps.navigationInstruction.instructions",
   "geocodingResults",
 ].join(",");
 
@@ -45,7 +52,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: "apex-routes",
-        routesApiConfigured: Boolean(env.GOOGLE_MAPS_API_KEY),
+        providerConfigured: Boolean(env.ROUTES_API_KEY),
         timestamp: new Date().toISOString(),
       }, 200, cors);
     }
@@ -68,8 +75,9 @@ export default {
       );
     }
 
-    if (!env.GOOGLE_MAPS_API_KEY) {
-      return jsonResponse({ error: "GOOGLE_MAPS_API_KEY is not configured." }, 500, cors);
+    const routeApiKey = env.ROUTES_API_KEY;
+    if (!routeApiKey) {
+      return jsonResponse({ error: "ROUTES_API_KEY is not configured." }, 500, cors);
     }
 
     const contentLength = Number(request.headers.get("Content-Length") || 0);
@@ -195,12 +203,13 @@ function normalizeOptions(options = {}) {
     avoidHighways: Boolean(options.avoidHighways),
     avoidFerries: options.avoidFerries !== false,
     includeTrafficPolyline: Boolean(options.includeTrafficPolyline),
+    languageCode: ["en-US", "es-419", "es-NI"].includes(options.languageCode) ? options.languageCode : "en-US",
   };
 }
 
 async function buildRoutePlan(payload, env) {
   const computedAtMs = Date.now();
-  // Google requires traffic departure times to be current or future. Add a small
+  // The routing service requires traffic departure times to be current or future. Add a small
   // buffer so network latency does not make the request timestamp appear stale.
   const toPickupDeparture = computedAtMs + 30_000;
   const toPickup = await computeLeg(payload.origin, payload.pickup, toPickupDeparture, payload.options, env);
@@ -257,8 +266,8 @@ async function buildRoutePlan(payload, env) {
 
 async function computeLeg(origin, destination, departureTimeMs, options, env) {
   const requestBody = {
-    origin: toGoogleWaypoint(origin),
-    destination: toGoogleWaypoint(destination),
+    origin: toProviderWaypoint(origin),
+    destination: toProviderWaypoint(destination),
     travelMode: "DRIVE",
     routingPreference: options.routingPreference,
     departureTime: new Date(departureTimeMs).toISOString(),
@@ -270,7 +279,7 @@ async function computeLeg(origin, destination, departureTimeMs, options, env) {
     },
     polylineQuality: "OVERVIEW",
     polylineEncoding: "ENCODED_POLYLINE",
-    languageCode: "en-US",
+    languageCode: options.languageCode === "es-NI" ? "es-419" : options.languageCode,
     regionCode: "us",
     units: "IMPERIAL",
   };
@@ -282,10 +291,10 @@ async function computeLeg(origin, destination, departureTimeMs, options, env) {
     requestBody.extraComputations = ["TRAFFIC_ON_POLYLINE"];
   }
 
-  const apiResponse = await callGoogle(ROUTES_URL, requestBody, ROUTE_FIELD_MASK, env.GOOGLE_MAPS_API_KEY);
+  const apiResponse = await callRoutingProvider(ROUTES_URL, requestBody, ROUTE_FIELD_MASK, env.ROUTES_API_KEY);
   const routes = Array.isArray(apiResponse.routes) ? apiResponse.routes : [];
   if (!routes.length) {
-    throw httpError(502, "Google Routes API returned no route for one of the legs.", apiResponse);
+    throw httpError(502, "The routing service returned no route for one of the legs.", apiResponse);
   }
 
   return {
@@ -323,24 +332,33 @@ function normalizeRoute(route, index, departureTimeMs) {
     startLocation: route.legs?.[0]?.startLocation?.latLng || null,
     endLocation: route.legs?.at(-1)?.endLocation?.latLng || null,
     congestion,
+    steps: (route.legs || []).flatMap((leg) => (leg.steps || []).map((step) => ({
+      distanceMeters: Number(step.distanceMeters || 0),
+      staticDurationSeconds: parseDurationSeconds(step.staticDuration),
+      instruction: cleanText(step.navigationInstruction?.instructions || "", 500),
+      maneuver: step.navigationInstruction?.maneuver || null,
+      encodedPolyline: step.polyline?.encodedPolyline || null,
+      startLocation: step.startLocation?.latLng || null,
+      endLocation: step.endLocation?.latLng || null,
+    }))),
   };
 }
 
 async function buildRouteMatrix(payload, env) {
   const requestBody = {
     origins: [{
-      waypoint: toGoogleWaypoint(payload.origin),
+      waypoint: toProviderWaypoint(payload.origin),
       routeModifiers: {
         avoidTolls: payload.options.avoidTolls,
         avoidHighways: payload.options.avoidHighways,
         avoidFerries: payload.options.avoidFerries,
       },
     }],
-    destinations: payload.destinations.map((item) => ({ waypoint: toGoogleWaypoint(item.point) })),
+    destinations: payload.destinations.map((item) => ({ waypoint: toProviderWaypoint(item.point) })),
     travelMode: "DRIVE",
     routingPreference: payload.options.routingPreference,
     departureTime: new Date(Date.now() + 30_000).toISOString(),
-    languageCode: "en-US",
+    languageCode: payload.options.languageCode === "es-NI" ? "es-419" : payload.options.languageCode,
     regionCode: "us",
     units: "IMPERIAL",
   };
@@ -349,7 +367,7 @@ async function buildRouteMatrix(payload, env) {
     requestBody.trafficModel = payload.options.trafficModel;
   }
 
-  const apiResponse = await callGoogle(MATRIX_URL, requestBody, MATRIX_FIELD_MASK, env.GOOGLE_MAPS_API_KEY);
+  const apiResponse = await callRoutingProvider(MATRIX_URL, requestBody, MATRIX_FIELD_MASK, env.ROUTES_API_KEY);
   const elements = Array.isArray(apiResponse) ? apiResponse : [];
   const rows = elements.map((element) => {
     const destination = payload.destinations[element.destinationIndex];
@@ -385,7 +403,7 @@ async function buildRouteMatrix(payload, env) {
   };
 }
 
-async function callGoogle(url, body, fieldMask, apiKey) {
+async function callRoutingProvider(url, body, fieldMask, apiKey) {
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -405,14 +423,14 @@ async function callGoogle(url, body, fieldMask, apiKey) {
   }
 
   if (!response.ok) {
-    const message = payload?.error?.message || payload?.message || `Google Routes API error ${response.status}.`;
+    const message = payload?.error?.message || payload?.message || `Routing service error ${response.status}.`;
     throw httpError(response.status >= 500 ? 502 : 400, message, payload);
   }
 
   return payload;
 }
 
-function toGoogleWaypoint(point) {
+function toProviderWaypoint(point) {
   if (point.address) return { address: point.address };
   return {
     location: {
@@ -473,7 +491,7 @@ function httpError(status, message, details) {
 }
 
 function allowedOrigins(env) {
-  return String(env.ALLOWED_ORIGINS || "https://apex.benlane.us,http://localhost:8080,http://127.0.0.1:8080")
+  return String(env.ALLOWED_ORIGINS || "https://apex.benlane.us,https://*.pages.dev,http://localhost:8080,http://127.0.0.1:8080")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
@@ -481,7 +499,11 @@ function allowedOrigins(env) {
 
 function isAllowedOrigin(origin, env) {
   if (!origin) return false;
-  return allowedOrigins(env).includes(origin);
+  return allowedOrigins(env).some((pattern) => {
+    if (!pattern.includes("*")) return pattern === origin;
+    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*");
+    return new RegExp(`^${escaped}$`).test(origin);
+  });
 }
 
 function consumeRateLimit(request) {
@@ -499,7 +521,7 @@ function consumeRateLimit(request) {
   rateBuckets.set(key, bucket);
 
   // Opportunistic cleanup keeps the per-isolate map bounded. This is a
-  // best-effort application guard; add a Cloudflare edge rate-limiting rule
+  // best-effort application guard; add an edge rate-limiting rule
   // for a globally enforced production ceiling.
   if (rateBuckets.size > 500) {
     for (const [entryKey, entry] of rateBuckets) {

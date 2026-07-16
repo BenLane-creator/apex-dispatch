@@ -1,41 +1,20 @@
-# Apex Dispatch Routes MVP v2 — Implementation Summary
+# Apex Dispatch v3 Implementation Summary
 
-**A BenDESK product**
+Implemented:
 
-## Delivered
+- Streamlined three-input Dispatch form
+- Automatic mileage, time, traffic, ETA, return, and profitability calculations
+- Toll and ferry toggles moved to Settings
+- Automatic exact recovery selection from active saved points
+- Recovery-point address, coordinates, and parking instructions
+- English and Nicaraguan Spanish UI
+- Voice recommendations, alerts, and maneuver guidance
+- Foreground GPS step progression
+- Automatic shift and active-delivery timers
+- Simplified logs and CSV export
+- Vendor-neutral user interface
+- Generic routing-service errors and secret naming
+- Temporary deployment-origin support in the worker allowlist
+- Offline cache version update
 
-- Traffic-aware Google Routes API integration through a Cloudflare Worker
-- Three-leg operational routing: origin → pickup → customer → recovery
-- Alternative-route comparison for each leg
-- Traffic delay, mileage, duration, and ETA calculations
-- Recovery destination route matrix
-- Browser GPS with optional movement/time refresh
-- Google Maps navigation handoff
-- Route geometry preview
-- Route-derived offer scoring and route-aware instructions
-- CSV route metrics
-- Protected API key, CORS allowlist, validation, reduced field masks, short cache, and request throttling guard
-- Updated PWA cache and manifest
-- GitHub Pages `CNAME` for `apex.benlane.us`
-- Worker and frontend deployment documentation
-
-## Validation completed
-
-- `node --check app.js`
-- `node --check worker/src/index.js`
-- HTML/JavaScript ID-reference consistency check: no missing or duplicate IDs
-- Manifest and package JSON parsing
-- Static HTTP checks for all app-shell assets
-- Mocked Worker integration test for route planning, alternatives, traffic totals, and matrix sorting
-
-## External configuration still required
-
-The implementation cannot call Google until the owner completes these external account actions:
-
-1. Enable Google Routes API and billing.
-2. Create a Routes-API-restricted key.
-3. Store it as the Cloudflare Worker secret `GOOGLE_MAPS_API_KEY`.
-4. Deploy the Worker and attach `api.benlane.us`.
-5. Push the frontend files to the GitHub Pages repository.
-
-See `ROUTES_DEPLOYMENT.md` for exact commands.
+Validation includes JavaScript syntax, manifest validation, HTML/JavaScript ID integrity, worker route-step normalization, and wildcard-origin testing.
