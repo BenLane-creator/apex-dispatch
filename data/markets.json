@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "markets": [
+    {
+      "id": "st-george-ut",
+      "name": "St. George, Utah",
+      "timezone": "America/Denver",
+      "center": [-113.5833, 37.0965],
+      "zoom": 11.5,
+      "mapStyle": "https://demotiles.maplibre.org/style.json",
+      "layers": {
+        "zones": "./data/st-george-zones.geojson",
+        "corridors": "./data/st-george-corridors.geojson",
+        "staging": "./data/staging.geojson",
+        "pois": "./data/pois.geojson"
+      },
+      "scoring": {
+        "minimumPayout": 7,
+        "targetGrossPerMile": 1.75,
+        "targetGrossHourly": 25,
+        "vehicleCostPerMile": 0.5
+      }
+    }
+  ]
+}
