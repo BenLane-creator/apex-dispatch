@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - feature/operational-intelligence
-    paths:
-      - .github/workflows/apply-operational-intelligence.yml
 
 permissions:
   contents: write
