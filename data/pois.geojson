@@ -1,0 +1,13 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "id": "red-cliffs-retail-cluster", "marketId": "st-george-ut", "name": "Red Cliffs Retail Cluster", "category": "shopping", "corridorId": "red-cliffs-mall-drive", "address": "Red Cliffs Dr, St. George, UT" }, "geometry": { "type": "Point", "coordinates": [-113.5584,37.1128] } },
+    { "type": "Feature", "properties": { "id": "mall-drive-restaurants", "marketId": "st-george-ut", "name": "Mall Drive Restaurant Cluster", "category": "restaurant", "corridorId": "red-cliffs-mall-drive", "address": "Mall Dr, St. George, UT" }, "geometry": { "type": "Point", "coordinates": [-113.5482,37.1079] } },
+    { "type": "Feature", "properties": { "id": "river-road-grocery", "marketId": "st-george-ut", "name": "River Road Grocery Cluster", "category": "grocery", "corridorId": "river-road", "address": "River Rd, St. George, UT" }, "geometry": { "type": "Point", "coordinates": [-113.5570,37.1026] } },
+    { "type": "Feature", "properties": { "id": "downtown-restaurants", "marketId": "st-george-ut", "name": "Downtown Restaurant Cluster", "category": "restaurant", "corridorId": "st-george-boulevard", "address": "St. George Blvd, St. George, UT" }, "geometry": { "type": "Point", "coordinates": [-113.5840,37.1105] } },
+    { "type": "Feature", "properties": { "id": "bluff-hotels", "marketId": "st-george-ut", "name": "Bluff Street Hotel Cluster", "category": "hotel", "corridorId": "bluff-street", "address": "Bluff St, St. George, UT" }, "geometry": { "type": "Point", "coordinates": [-113.5990,37.0960] } },
+    { "type": "Feature", "properties": { "id": "washington-retail", "marketId": "st-george-ut", "name": "Washington Retail Cluster", "category": "shopping", "corridorId": "washington-telegraph", "address": "Telegraph St, Washington, UT" }, "geometry": { "type": "Point", "coordinates": [-113.4970,37.1305] } },
+    { "type": "Feature", "properties": { "id": "central-hospital", "marketId": "st-george-ut", "name": "Central Medical District", "category": "hospital", "corridorId": "river-road", "address": "River Rd, St. George, UT" }, "geometry": { "type": "Point", "coordinates": [-113.5536,37.1000] } },
+    { "type": "Feature", "properties": { "id": "south-fuel", "marketId": "st-george-ut", "name": "South Interchange Fuel Cluster", "category": "fuel", "corridorId": "bluff-street", "address": "South St. George, UT" }, "geometry": { "type": "Point", "coordinates": [-113.5940,37.0780] } }
+  ]
+}
