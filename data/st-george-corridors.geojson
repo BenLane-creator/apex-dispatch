@@ -1,0 +1,10 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "id": "red-cliffs-mall-drive", "name": "Red Cliffs / Mall Drive", "classification": "primary", "notes": "Major restaurant and retail concentration." }, "geometry": { "type": "LineString", "coordinates": [[-113.5738,37.1165],[-113.5584,37.1128],[-113.5444,37.1082]] } },
+    { "type": "Feature", "properties": { "id": "river-road", "name": "River Road", "classification": "primary", "notes": "North-south merchant and service corridor." }, "geometry": { "type": "LineString", "coordinates": [[-113.5574,37.1320],[-113.5570,37.1020],[-113.5535,37.0720]] } },
+    { "type": "Feature", "properties": { "id": "st-george-boulevard", "name": "St. George Boulevard", "classification": "primary", "notes": "Downtown restaurants, lodging, and retail." }, "geometry": { "type": "LineString", "coordinates": [[-113.6205,37.1103],[-113.5820,37.1107],[-113.5508,37.1102]] } },
+    { "type": "Feature", "properties": { "id": "bluff-street", "name": "Bluff Street", "classification": "secondary", "notes": "Hotel, fuel, restaurant, and downtown access corridor." }, "geometry": { "type": "LineString", "coordinates": [[-113.6034,37.1420],[-113.5990,37.1080],[-113.5940,37.0780]] } },
+    { "type": "Feature", "properties": { "id": "washington-telegraph", "name": "Washington / Telegraph", "classification": "secondary", "notes": "Washington retail and restaurant corridor." }, "geometry": { "type": "LineString", "coordinates": [[-113.5160,37.1320],[-113.4970,37.1305],[-113.4770,37.1290]] } }
+  ]
+}
