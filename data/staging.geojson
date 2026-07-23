@@ -1,0 +1,50 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "red-cliffs-primary",
+        "marketId": "st-george-ut",
+        "name": "Red Cliffs Primary",
+        "address": "1770 Red Cliffs Dr, St. George, UT 84790",
+        "zoneId": "st-george-core",
+        "corridorId": "red-cliffs-mall-drive",
+        "preferred": true,
+        "active": true,
+        "notes": "Use a legal marked stall away from loading and fire lanes."
+      },
+      "geometry": { "type": "Point", "coordinates": [-113.5588, 37.1128] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "downtown-primary",
+        "marketId": "st-george-ut",
+        "name": "Downtown Core West",
+        "address": "50 S Main St, St. George, UT 84770",
+        "zoneId": "st-george-core",
+        "corridorId": "st-george-boulevard",
+        "preferred": false,
+        "active": true,
+        "notes": "Use public parking and verify posted time restrictions."
+      },
+      "geometry": { "type": "Point", "coordinates": [-113.5856, 37.1088] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "washington-primary",
+        "marketId": "st-george-ut",
+        "name": "Washington East Core",
+        "address": "350 N Community Center Dr, Washington, UT 84780",
+        "zoneId": "st-george-conditional",
+        "corridorId": "washington-telegraph",
+        "preferred": false,
+        "active": true,
+        "notes": "Use a marked stall and verify event restrictions."
+      },
+      "geometry": { "type": "Point", "coordinates": [-113.5032, 37.13] }
+    }
+  ]
+}

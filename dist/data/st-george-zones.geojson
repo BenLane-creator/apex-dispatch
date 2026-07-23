@@ -1,0 +1,47 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "st-george-outer",
+        "name": "St. George Outer",
+        "classification": "outer",
+        "minimumGrossPerMile": 2.25,
+        "notes": "Pilot operating envelope; not a municipal boundary."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-113.78, 36.94], [-113.78, 37.25], [-113.36, 37.25], [-113.36, 36.94], [-113.78, 36.94]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "st-george-conditional",
+        "name": "St. George Conditional",
+        "classification": "conditional",
+        "minimumGrossPerMile": 2.0,
+        "notes": "Use stronger economics when recovery travel is likely."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-113.69, 37.015], [-113.69, 37.175], [-113.47, 37.175], [-113.47, 37.015], [-113.69, 37.015]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "st-george-core",
+        "name": "St. George Core",
+        "classification": "core",
+        "minimumGrossPerMile": 1.75,
+        "notes": "Highest concentration of configured commercial corridors."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-113.635, 37.055], [-113.635, 37.135], [-113.535, 37.135], [-113.535, 37.055], [-113.635, 37.055]]]
+      }
+    }
+  ]
+}

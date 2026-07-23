@@ -1,0 +1,60 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "red-cliffs-mall-drive",
+        "name": "Red Cliffs / Mall Drive",
+        "classification": "primary",
+        "notes": "Major restaurant and retail concentration.",
+        "lastReviewed": "2026-07-22"
+      },
+      "geometry": { "type": "LineString", "coordinates": [[-113.5738, 37.1165], [-113.5584, 37.1128], [-113.5444, 37.1082]] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "river-road",
+        "name": "River Road",
+        "classification": "primary",
+        "notes": "North-south merchant, grocery, and medical corridor.",
+        "lastReviewed": "2026-07-22"
+      },
+      "geometry": { "type": "LineString", "coordinates": [[-113.5574, 37.132], [-113.557, 37.102], [-113.5535, 37.072]] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "st-george-boulevard",
+        "name": "St. George Boulevard",
+        "classification": "primary",
+        "notes": "Downtown restaurants, lodging, and retail.",
+        "lastReviewed": "2026-07-22"
+      },
+      "geometry": { "type": "LineString", "coordinates": [[-113.6205, 37.1103], [-113.582, 37.1107], [-113.5508, 37.1102]] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "bluff-street",
+        "name": "Bluff Street",
+        "classification": "secondary",
+        "notes": "Hotel, fuel, restaurant, and downtown access corridor.",
+        "lastReviewed": "2026-07-22"
+      },
+      "geometry": { "type": "LineString", "coordinates": [[-113.6034, 37.142], [-113.599, 37.108], [-113.594, 37.078]] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "washington-telegraph",
+        "name": "Washington / Telegraph",
+        "classification": "secondary",
+        "notes": "Washington retail and restaurant corridor.",
+        "lastReviewed": "2026-07-22"
+      },
+      "geometry": { "type": "LineString", "coordinates": [[-113.516, 37.132], [-113.497, 37.1305], [-113.477, 37.129]] }
+    }
+  ]
+}

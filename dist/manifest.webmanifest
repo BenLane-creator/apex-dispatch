@@ -1,0 +1,22 @@
+{
+  "id": "/",
+  "name": "Apex Dispatch",
+  "short_name": "Apex",
+  "description": "A BenDESK product for bilingual route intelligence, exact recovery guidance, voice alerts, and delivery offer scoring.",
+  "lang": "en",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#080d19",
+  "theme_color": "#0b1020",
+  "categories": ["business", "navigation", "productivity"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

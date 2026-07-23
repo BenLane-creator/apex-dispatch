@@ -1,0 +1,44 @@
+name: Validate operational intelligence
+
+on:
+  pull_request:
+    paths:
+      - "index.html"
+      - "app.js"
+      - "service-worker.js"
+      - "operational-intelligence.css"
+      - "modules/**"
+      - "data/**"
+      - "dist/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "worker/**"
+  push:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - "app.js"
+      - "service-worker.js"
+      - "operational-intelligence.css"
+      - "modules/**"
+      - "data/**"
+      - "dist/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "worker/**"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
