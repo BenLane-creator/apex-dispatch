@@ -25,15 +25,8 @@ export class OperationalMap extends EventTarget {
   }
 
   async initialize(market, history = []) {
-    if (!window.maplibregl) throw new Error("MapLibre failed to load.");
     this.market = market;
     this.destroy();
-
-    const mapResult = await createMapWithFallback(this.containerId, market);
-    this.map = mapResult.map;
-    this.basemapAvailable = mapResult.basemapAvailable;
-    this.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
-    this.map.addControl(new maplibregl.ScaleControl({ unit: "imperial" }), "bottom-left");
 
     const [zones, corridors, pois, staging] = await Promise.all([
       loadZones(market),
@@ -42,6 +35,18 @@ export class OperationalMap extends EventTarget {
       loadStagingPoints(market),
     ]);
     this.data = { zones, corridors, pois, staging };
+
+    if (!window.maplibregl) throw new Error("MapLibre failed to load.");
+    if (typeof maplibregl.supported === "function" && !maplibregl.supported()) {
+      throw new Error("Interactive mapping requires WebGL, which is unavailable in this browser.");
+    }
+
+    const mapResult = await createMapWithFallback(this.containerId, market);
+    this.map = mapResult.map;
+    this.basemapAvailable = mapResult.basemapAvailable;
+    this.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+    this.map.addControl(new maplibregl.ScaleControl({ unit: "imperial" }), "bottom-left");
+
     addZoneLayers(this.map, zones, (feature) => this.emitSelection("zone", feature));
     addCorridorLayers(this.map, corridors, (feature) => this.emitSelection("corridor", feature));
     addPoiLayers(this.map, filterPois(pois, this.poiCategory), (feature) => this.emitSelection("poi", feature));
@@ -139,15 +144,21 @@ async function createMapWithFallback(container, market) {
     attributionControl: true,
     maxPitch: 60,
   };
-  let map = new maplibregl.Map(options);
+  let map;
   try {
+    map = new maplibregl.Map(options);
     await waitForMapLoad(map, 9000);
     return { map, basemapAvailable: true };
-  } catch {
-    map.remove();
-    map = new maplibregl.Map({ ...options, style: OFFLINE_STYLE });
-    await waitForMapLoad(map, 3000);
-    return { map, basemapAvailable: false };
+  } catch (primaryError) {
+    map?.remove();
+    try {
+      map = new maplibregl.Map({ ...options, style: OFFLINE_STYLE });
+      await waitForMapLoad(map, 3000);
+      return { map, basemapAvailable: false };
+    } catch {
+      map?.remove();
+      throw new Error("Interactive mapping could not initialize. Verify that WebGL is enabled and reload Apex.", { cause: primaryError });
+    }
   }
 }
 

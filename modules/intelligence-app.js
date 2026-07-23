@@ -64,8 +64,7 @@ async function boot() {
     if (intelligenceTab?.classList.contains("active")) await ensureMap();
     else setStatus("Open Local Intelligence to initialize the map.");
   } catch (error) {
-    console.error(error);
-    setStatus(error.message || "Operational intelligence failed to load.", "error");
+    handleMapFailure(error);
   }
 }
 
@@ -88,7 +87,11 @@ function bindUi() {
   $("exportIntelligence")?.addEventListener("click", downloadHistoryExport);
   $("importIntelligence")?.addEventListener("change", uploadHistoryImport);
   document.querySelector('[data-tab="intelligence"]')?.addEventListener("click", () => {
-    requestAnimationFrame(() => ensureMap().then(() => state.map?.resize()));
+    requestAnimationFrame(() => {
+      ensureMap()
+        .then(() => state.map?.resize())
+        .catch(handleMapFailure);
+    });
   });
   state.location.addEventListener("position", (event) => applyPosition(event.detail));
   state.location.addEventListener("error", (event) => setStatus(event.detail.message, "error"));
@@ -105,6 +108,8 @@ async function ensureMap() {
   state.mapPromise = (async () => {
     setStatus(`Loading ${state.market.name}…`);
     state.map = state.map || new OperationalMap("operationalMap");
+    state.map.destroy();
+    prepareMapContainer();
     bindMapEvents(state.map);
     await state.map.initialize(state.market, state.history);
     state.mapReady = true;
@@ -133,7 +138,11 @@ async function locate() {
   button.disabled = true;
   setStatus("Requesting current location…");
   try {
-    await ensureMap();
+    try {
+      await ensureMap();
+    } catch (error) {
+      handleMapFailure(error);
+    }
     const position = await state.location.locate({ maximumAge: 0 });
     applyPosition(position);
   } catch (error) {
@@ -170,8 +179,44 @@ async function changeMarket(event) {
     await ensureMap();
     setStatus(`${market.name} loaded.`, "ok");
   } catch (error) {
-    setStatus(error.message, "error");
+    handleMapFailure(error);
   }
+}
+
+function prepareMapContainer() {
+  const container = $("operationalMap");
+  if (!container) return;
+  container.replaceChildren();
+  container.classList.remove("operational-map--fallback");
+  container.setAttribute("role", "application");
+  container.setAttribute("aria-label", "Local operating intelligence map");
+}
+
+function handleMapFailure(error) {
+  const message = error?.message || "Operational intelligence failed to initialize.";
+  console.warn(message);
+  state.mapReady = false;
+  state.map?.destroy();
+  updateSummary();
+  renderStagingManager();
+
+  const container = $("operationalMap");
+  if (container) {
+    container.replaceChildren();
+    container.classList.add("operational-map--fallback");
+    container.setAttribute("role", "status");
+    container.setAttribute("aria-label", "Interactive map unavailable");
+    const fallback = document.createElement("div");
+    fallback.className = "operational-map-fallback";
+    const heading = document.createElement("strong");
+    heading.textContent = "Interactive map unavailable";
+    const detail = document.createElement("span");
+    detail.textContent = "Market overlays and operational summaries remain available. Enable WebGL and reload Apex to restore the map.";
+    fallback.append(heading, detail);
+    container.append(fallback);
+  }
+
+  setStatus(`${message} Overlay data remains available without the interactive map.`, "warning");
 }
 
 function handleSelection(selection) {
