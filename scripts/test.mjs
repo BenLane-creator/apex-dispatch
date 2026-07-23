@@ -104,6 +104,11 @@ assert(serviceWorker.includes("CACHE_OPERATIONAL_DATA"), "The service worker can
 const intelligenceSource = await readFile(join(root, "modules", "intelligence-app.js"), "utf8");
 assert(!/DoorDash|delivery-platform password|platform credential/i.test(intelligenceSource), "Operational intelligence must not access delivery-platform credentials.");
 assert(!/watchPosition\s*\(/.test(intelligenceSource), "Operational intelligence must not start continuous GPS tracking.");
+assert(intelligenceSource.includes("handleMapFailure"), "Operational intelligence must handle map initialization failures.");
+
+const mapSource = await readFile(join(root, "modules", "map.js"), "utf8");
+assert(mapSource.includes("maplibregl.supported"), "The map must detect browsers without WebGL support.");
+assert(mapSource.indexOf("this.data = { zones, corridors, pois, staging }") < mapSource.indexOf("maplibregl.supported"), "Overlay data must load before the WebGL support check.");
 
 for (const file of deployedFiles) {
   await assertSame(file, join("dist", file));
