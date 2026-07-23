@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Apex Dispatch</title>
+  <desc id="desc">Apex Dispatch by BenDESK application icon</desc>
+  <rect width="512" height="512" rx="112" fill="#0b1020"/>
+  <path d="M112 328 256 88l144 240h-82l-62-105-62 105h-82Z" fill="#69d2ff"/>
+  <path d="M168 344h176v72H168z" rx="24" fill="#8cf4c5"/>
+</svg>

@@ -24,6 +24,9 @@ The driver never estimates mileage, drive time, traffic delay, return distance, 
 - Foreground spoken maneuver guidance
 - Toll and ferry preferences in Settings
 - Automatic shift timer and delivery logging
+- Local operating map with zones, corridors, curated merchant POIs, and staging points
+- Coarsened operational heatmaps and evidence-aware recovery ranking
+- Import/export for market definitions and operational history
 - Offline app shell and local browser storage
 - CSV export
 - Protected routing-service gateway
@@ -35,10 +38,19 @@ Spoken guidance uses the device location while Apex remains open. The driver mus
 ## Local run
 
 ```bash
+npm test
 python3 -m http.server 8080
 ```
 
 Open `http://localhost:8080`.
+
+## Cloudflare Pages build
+
+```bash
+npm run build
+```
+
+Publish the generated `dist` directory. See `OPERATIONAL_INTELLIGENCE.md` for the module and privacy boundaries.
 
 ## Deployment files
 
@@ -47,4 +59,6 @@ Open `http://localhost:8080`.
 - `app.js` — scoring, recovery selection, voice, shift tracking, and local storage
 - `service-worker.js` — offline app-shell cache
 - `manifest.webmanifest` — installable app metadata
+- `modules/` and `data/` — Local Operating Intelligence source and curated market overlays
+- `dist/` — generated Cloudflare Pages deployment
 - `worker/` — protected routing gateway
