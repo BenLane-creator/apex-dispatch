@@ -35,3 +35,5 @@ Build output directory remains `dist`.
 MapLibre GL JS 5.24.0 is loaded from unpkg. OpenFreeMap Liberty is the default basemap. Local Apex overlays are cached for offline use; broad third-party basemap tile caching is intentionally excluded.
 
 Browsers without WebGL receive a clear non-interactive fallback while the curated overlay counts, market profile, staging management, import/export, and location-derived summaries remain available.
+
+The service worker preloads each versioned app shell with cache-reload semantics and revalidates same-origin navigation and asset requests, preventing the browser HTTP cache from delaying newly deployed modules.

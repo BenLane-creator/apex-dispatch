@@ -1,4 +1,4 @@
-const CACHE_NAME = "apex-dispatch-v3-bendesk-3";
+const CACHE_NAME = "apex-dispatch-v3-bendesk-4";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -26,7 +26,7 @@ const APP_SHELL = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
+      .then((cache) => cacheFreshAssets(cache, APP_SHELL))
       .then(() => self.skipWaiting()),
   );
 });
@@ -73,7 +73,7 @@ self.addEventListener("message", (event) => {
 
 async function networkFirst(request) {
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, { cache: "no-cache" });
     if (response.ok) {
       const cache = await caches.open(CACHE_NAME);
       await cache.put(request, response.clone());
@@ -87,7 +87,7 @@ async function networkFirst(request) {
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);
-  const network = fetch(request)
+  const network = fetch(request, { cache: "no-cache" })
     .then((response) => {
       if (response.ok) cache.put(request, response.clone());
       return response;
@@ -95,6 +95,14 @@ async function staleWhileRevalidate(request) {
     .catch(() => null);
 
   return cached || network || new Response("Offline", { status: 503, statusText: "Offline" });
+}
+
+async function cacheFreshAssets(cache, urls) {
+  await Promise.all(urls.map(async (url) => {
+    const response = await fetch(url, { cache: "reload" });
+    if (!response.ok) throw new Error(`Unable to cache ${url}`);
+    await cache.put(url, response);
+  }));
 }
 
 function isOperationalAsset(url) {

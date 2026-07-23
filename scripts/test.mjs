@@ -100,6 +100,9 @@ for (const asset of [
   assert(serviceWorker.includes(`"${asset}"`), `The service worker app shell is missing ${asset}.`);
 }
 assert(serviceWorker.includes("CACHE_OPERATIONAL_DATA"), "The service worker cannot synchronize operational overlays.");
+assert(serviceWorker.includes('CACHE_NAME = "apex-dispatch-v3-bendesk-4"'), "The app-shell cache version was not rotated.");
+assert(serviceWorker.includes("cacheFreshAssets(cache, APP_SHELL)"), "The install step must bypass stale HTTP-cache entries.");
+assert.equal((serviceWorker.match(/fetch\(request, \{ cache: "no-cache" \}\)/g) || []).length, 2, "Navigation and static-asset refreshes must revalidate the HTTP cache.");
 
 const intelligenceSource = await readFile(join(root, "modules", "intelligence-app.js"), "utf8");
 assert(!/DoorDash|delivery-platform password|platform credential/i.test(intelligenceSource), "Operational intelligence must not access delivery-platform credentials.");
