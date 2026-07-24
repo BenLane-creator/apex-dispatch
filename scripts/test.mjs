@@ -37,6 +37,7 @@ const syntaxFiles = [
   join(root, "app.js"),
   join(root, "service-worker.js"),
   join(root, "worker", "src", "index.js"),
+  join(root, "worker", "test.mjs"),
   join(root, "scripts", "build.mjs"),
   ...moduleFiles,
 ];
@@ -52,9 +53,13 @@ assert.equal(new Set(ids).size, ids.length, "index.html contains duplicate IDs."
 for (const id of requiredIntelligenceIds) {
   assert(ids.includes(id), `index.html is missing #${id}.`);
 }
-assert.match(html, /maplibre-gl@5\.24\.0/, "MapLibre must remain pinned to version 5.24.0.");
+assert(!/<(?:link|script)[^>]+unpkg\.com\/maplibre-gl/i.test(html), "MapLibre must not load before Local Intelligence is opened.");
 assert.match(html, /type="module"\s+src="modules\/intelligence-app\.js"/, "The intelligence application module is not loaded.");
 assert.match(html, /Driver authority remains final\./, "The decision-support safety statement is missing.");
+assert.match(html, /id="routingAttribution"[^>]*>Powered by Google, ©2026 Google</, "Provider-backed route results require visible Google attribution.");
+assert.match(html, /role="tablist"/, "Primary navigation must expose tab semantics.");
+assert.equal((html.match(/role="tab"/g) || []).length, 5, "Every navigation tab must expose tab semantics.");
+assert.equal((html.match(/role="tabpanel"/g) || []).length, 5, "Every application panel must expose tab-panel semantics.");
 
 for (const reference of localHtmlReferences(html)) {
   await assertReadable(join(root, reference), `HTML asset ${reference} does not exist.`);
@@ -94,13 +99,14 @@ const serviceWorker = await readFile(join(root, "service-worker.js"), "utf8");
 for (const asset of [
   "./operational-intelligence.css",
   "./modules/intelligence-app.js",
+  "./modules/intelligence-i18n.js",
   "./modules/map.js",
   "./data/markets.json",
 ]) {
   assert(serviceWorker.includes(`"${asset}"`), `The service worker app shell is missing ${asset}.`);
 }
 assert(serviceWorker.includes("CACHE_OPERATIONAL_DATA"), "The service worker cannot synchronize operational overlays.");
-assert(serviceWorker.includes('CACHE_NAME = "apex-dispatch-v3-bendesk-4"'), "The app-shell cache version was not rotated.");
+assert(serviceWorker.includes('CACHE_NAME = "apex-dispatch-v3-bendesk-5"'), "The app-shell cache version was not rotated.");
 assert(serviceWorker.includes("cacheFreshAssets(cache, APP_SHELL)"), "The install step must bypass stale HTTP-cache entries.");
 assert.equal((serviceWorker.match(/fetch\(request, \{ cache: "no-cache" \}\)/g) || []).length, 2, "Navigation and static-asset refreshes must revalidate the HTTP cache.");
 
@@ -108,10 +114,26 @@ const intelligenceSource = await readFile(join(root, "modules", "intelligence-ap
 assert(!/DoorDash|delivery-platform password|platform credential/i.test(intelligenceSource), "Operational intelligence must not access delivery-platform credentials.");
 assert(!/watchPosition\s*\(/.test(intelligenceSource), "Operational intelligence must not start continuous GPS tracking.");
 assert(intelligenceSource.includes("handleMapFailure"), "Operational intelligence must handle map initialization failures.");
+const intelligenceKeys = new Set([
+  ...[...html.matchAll(/data-oi-i18n(?:-placeholder|-aria-label)?="([^"]+)"/g)].map((match) => match[1]),
+  ...[...intelligenceSource.matchAll(/oiT\("([^"]+)"/g)].map((match) => match[1]),
+]);
+const originalDocument = globalThis.document;
+globalThis.document = { documentElement: { lang: "en" } };
+const { hasOiTranslation } = await import("../modules/intelligence-i18n.js");
+for (const language of ["en", "es-NI"]) {
+  globalThis.document.documentElement.lang = language;
+  for (const key of intelligenceKeys) {
+    assert(hasOiTranslation(key, language), `Missing ${language} operational-intelligence translation for ${key}.`);
+  }
+}
+globalThis.document = originalDocument;
 
 const mapSource = await readFile(join(root, "modules", "map.js"), "utf8");
+assert(mapSource.includes("maplibre-gl@${MAPLIBRE_VERSION}"), "MapLibre must remain pinned to a versioned lazy-load URL.");
+assert(mapSource.includes("loadMapLibreAsset"), "MapLibre assets must load on demand.");
 assert(mapSource.includes("maplibregl.supported"), "The map must detect browsers without WebGL support.");
-assert(mapSource.indexOf("this.data = { zones, corridors, pois, staging }") < mapSource.indexOf("maplibregl.supported"), "Overlay data must load before the WebGL support check.");
+assert(mapSource.indexOf("this.data = { zones, corridors, pois, staging }") < mapSource.indexOf("supportsWebGl()"), "Overlay data must load before the WebGL support check.");
 
 for (const file of deployedFiles) {
   await assertSame(file, join("dist", file));

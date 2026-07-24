@@ -10,7 +10,6 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="styles.css" />
-  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="operational-intelligence.css" />
 </head>
 <body>
@@ -34,16 +33,16 @@
     </div>
   </header>
 
-  <nav class="tab-bar" aria-label="Primary navigation">
-    <button class="tab active" data-tab="dispatch" data-i18n="dispatchTab">Dispatch</button>
-    <button class="tab" data-tab="intelligence">Intelligence</button>
-    <button class="tab" data-tab="shift" data-i18n="shiftTab">Shift</button>
-    <button class="tab" data-tab="recovery" data-i18n="recoveryTab">Recovery</button>
-    <button class="tab" data-tab="settings" data-i18n="settingsTab">Settings</button>
+  <nav class="tab-bar" role="tablist" aria-label="Primary navigation">
+    <button id="dispatchTab" class="tab active" role="tab" aria-selected="true" aria-controls="dispatch" data-tab="dispatch" data-i18n="dispatchTab">Dispatch</button>
+    <button id="intelligenceTab" class="tab" role="tab" aria-selected="false" aria-controls="intelligence" tabindex="-1" data-tab="intelligence" data-i18n="intelligenceTab">Intelligence</button>
+    <button id="shiftTab" class="tab" role="tab" aria-selected="false" aria-controls="shift" tabindex="-1" data-tab="shift" data-i18n="shiftTab">Shift</button>
+    <button id="recoveryTab" class="tab" role="tab" aria-selected="false" aria-controls="recovery" tabindex="-1" data-tab="recovery" data-i18n="recoveryTab">Recovery</button>
+    <button id="settingsTab" class="tab" role="tab" aria-selected="false" aria-controls="settings" tabindex="-1" data-tab="settings" data-i18n="settingsTab">Settings</button>
   </nav>
 
   <main>
-    <section id="dispatch" class="tab-panel active">
+    <section id="dispatch" class="tab-panel active" role="tabpanel" aria-labelledby="dispatchTab">
       <div class="notice compact-notice">
         <strong data-i18n="decisionSupport">Decision support only.</strong>
         <span data-i18n="decisionSupportDetail">The driver controls the vehicle and the connected delivery platform. Apex calculates the route, profitability, alerts, and exact recovery point.</span>
@@ -129,6 +128,7 @@
             <div><span data-i18n="toDropoff">To drop-off</span><strong id="toDropoffMetric">—</strong></div>
             <div><span data-i18n="toRecovery">To recovery</span><strong id="toRecoveryMetric">—</strong></div>
           </div>
+          <p id="routingAttribution" class="routing-attribution" hidden>Powered by Google, ©2026 Google</p>
 
           <div id="alertStack" class="alert-stack"></div>
 
@@ -157,110 +157,110 @@
       </div>
     </section>
 
-    <section id="intelligence" class="tab-panel">
+    <section id="intelligence" class="tab-panel" role="tabpanel" aria-labelledby="intelligenceTab" hidden>
       <div class="notice compact-notice">
-        <strong>Local Operating Intelligence.</strong>
-        <span>Commercial concentration and Apex operational activity are decision-support signals, not claims of live delivery-platform demand.</span>
+        <strong data-oi-i18n="noticeTitle">Local Operating Intelligence.</strong>
+        <span data-oi-i18n="noticeDetail">Commercial concentration and Apex operational activity are decision-support signals, not claims of live delivery-platform demand.</span>
       </div>
 
       <article class="card intelligence-shell">
         <div class="card-heading">
           <div>
-            <p class="eyebrow">Operational intelligence</p>
-            <h2>Market map and recovery analysis</h2>
+            <p class="eyebrow" data-oi-i18n="eyebrow">Operational intelligence</p>
+            <h2 data-oi-i18n="heading">Market map and recovery analysis</h2>
           </div>
-          <span id="locationTimestamp" class="mini-pill neutral">Location not requested</span>
+          <span id="locationTimestamp" class="mini-pill neutral" data-oi-i18n="locationNotRequested">Location not requested</span>
         </div>
 
         <div class="intelligence-toolbar">
           <label>
-            <span>Operating market</span>
-            <select id="marketSelect" aria-label="Operating market"></select>
+            <span data-oi-i18n="operatingMarket">Operating market</span>
+            <select id="marketSelect" aria-label="Operating market" data-oi-i18n-aria-label="operatingMarket"></select>
           </label>
           <label>
-            <span>POI filter</span>
-            <select id="poiFilter" aria-label="Point of interest filter">
-              <option value="all">All POIs</option>
-              <option value="restaurant">Restaurants</option>
-              <option value="shopping">Shopping</option>
-              <option value="grocery">Grocery</option>
-              <option value="hotel">Hotels</option>
-              <option value="hospital">Hospitals</option>
-              <option value="fuel">Fuel</option>
+            <span data-oi-i18n="poiFilter">POI filter</span>
+            <select id="poiFilter" aria-label="POI filter" data-oi-i18n-aria-label="poiFilter">
+              <option value="all" data-oi-i18n="allPois">All POIs</option>
+              <option value="restaurant" data-oi-i18n="restaurants">Restaurants</option>
+              <option value="shopping" data-oi-i18n="shopping">Shopping</option>
+              <option value="grocery" data-oi-i18n="grocery">Grocery</option>
+              <option value="hotel" data-oi-i18n="hotels">Hotels</option>
+              <option value="hospital" data-oi-i18n="hospitals">Hospitals</option>
+              <option value="fuel" data-oi-i18n="fuel">Fuel</option>
             </select>
           </label>
-          <button id="locateIntelligence" class="primary-button" type="button">Locate me</button>
-          <button id="centerMarket" class="secondary-button" type="button">Center market</button>
-          <button id="applyMarketScoring" class="secondary-button" type="button">Apply market scoring</button>
-          <button id="syncOfflineData" class="ghost-button" type="button">Sync overlays</button>
+          <button id="locateIntelligence" class="primary-button" type="button" data-oi-i18n="locateMe">Locate me</button>
+          <button id="centerMarket" class="secondary-button" type="button" data-oi-i18n="centerMarket">Center market</button>
+          <button id="applyMarketScoring" class="secondary-button" type="button" data-oi-i18n="applyMarketScoring">Apply market scoring</button>
+          <button id="syncOfflineData" class="ghost-button" type="button" data-oi-i18n="syncOverlays">Sync overlays</button>
         </div>
 
-        <div class="layer-controls" aria-label="Map layers">
-          <label><input type="checkbox" data-map-layer="zones" checked /> Zones</label>
-          <label><input type="checkbox" data-map-layer="corridors" checked /> Corridors</label>
-          <label><input type="checkbox" data-map-layer="pois" checked /> Merchant POIs</label>
-          <label><input type="checkbox" data-map-layer="staging" checked /> Staging points</label>
-          <label><input type="checkbox" data-map-layer="heatmap" checked /> Operational heatmap</label>
+        <div class="layer-controls" aria-label="Map layers" data-oi-i18n-aria-label="mapLayers">
+          <label><input type="checkbox" data-map-layer="zones" checked /> <span data-oi-i18n="zones">Zones</span></label>
+          <label><input type="checkbox" data-map-layer="corridors" checked /> <span data-oi-i18n="corridors">Corridors</span></label>
+          <label><input type="checkbox" data-map-layer="pois" checked /> <span data-oi-i18n="merchantPois">Merchant POIs</span></label>
+          <label><input type="checkbox" data-map-layer="staging" checked /> <span data-oi-i18n="stagingPoints">Staging points</span></label>
+          <label><input type="checkbox" data-map-layer="heatmap" checked /> <span data-oi-i18n="operationalHeatmap">Operational heatmap</span></label>
         </div>
 
         <div class="intelligence-map-layout">
-          <div id="operationalMap" class="operational-map" role="application" aria-label="Local operating intelligence map"></div>
+          <div id="operationalMap" class="operational-map" role="application" aria-label="Local operating intelligence map" data-oi-i18n-aria-label="mapAria"></div>
 
           <aside class="intelligence-side">
-            <section class="intelligence-summary" aria-label="Operational summary">
-              <div><span>Current area</span><strong id="currentAreaValue">Location not set</strong></div>
-              <div><span>Nearest staging</span><strong id="nearestStagingValue">Location not set</strong></div>
-              <div><span>Recovery recommendation</span><strong id="recoveryRecommendationValue">Location not set</strong></div>
-              <div><span>Visible intelligence</span><strong id="visibleIntelligenceValue">Loading…</strong></div>
-              <div><span>Offer history</span><strong id="historyCountValue">0 records</strong></div>
-              <div><span>Market</span><strong id="marketTimezoneValue">Loading…</strong></div>
+            <section class="intelligence-summary" aria-label="Operational summary" data-oi-i18n-aria-label="summaryAria">
+              <div><span data-oi-i18n="currentArea">Current area</span><strong id="currentAreaValue" data-oi-i18n="locationNotSet">Location not set</strong></div>
+              <div><span data-oi-i18n="nearestStaging">Nearest staging</span><strong id="nearestStagingValue" data-oi-i18n="locationNotSet">Location not set</strong></div>
+              <div><span data-oi-i18n="recoveryRecommendation">Recovery recommendation</span><strong id="recoveryRecommendationValue" data-oi-i18n="locationNotSet">Location not set</strong></div>
+              <div><span data-oi-i18n="visibleIntelligence">Visible intelligence</span><strong id="visibleIntelligenceValue" data-oi-i18n="loading">Loading…</strong></div>
+              <div><span data-oi-i18n="offerHistory">Offer history</span><strong id="historyCountValue">0 records</strong></div>
+              <div><span data-oi-i18n="market">Market</span><strong id="marketTimezoneValue" data-oi-i18n="loading">Loading…</strong></div>
             </section>
 
             <section class="card intelligence-selection">
-              <p class="eyebrow" id="selectionType">No selection</p>
-              <h3 id="selectionName">Select a zone, corridor, merchant cluster, or staging point</h3>
-              <p id="selectionDetails" class="muted-copy">Map selections can populate the offer pickup, add a recovery point, or show corridor performance.</p>
+              <p class="eyebrow" id="selectionType" data-oi-i18n="noSelection">No selection</p>
+              <h3 id="selectionName" data-oi-i18n="selectionPrompt">Select a zone, corridor, merchant cluster, or staging point</h3>
+              <p id="selectionDetails" class="muted-copy" data-oi-i18n="selectionHelp">Map selections can populate the offer pickup, add a recovery point, or show corridor performance.</p>
               <div class="button-row wrap">
-                <button id="useSelectionAsPickup" class="primary-button" type="button" disabled>Use as pickup</button>
-                <button id="useSelectionAsRecovery" class="secondary-button" type="button" disabled>Add to recovery network</button>
+                <button id="useSelectionAsPickup" class="primary-button" type="button" disabled data-oi-i18n="useAsPickup">Use as pickup</button>
+                <button id="useSelectionAsRecovery" class="secondary-button" type="button" disabled data-oi-i18n="addToRecovery">Add to recovery network</button>
               </div>
               <div id="corridorMetrics" class="corridor-metrics">
-                <div><span>Corridor performance</span><strong>Select a corridor</strong></div>
+                <div><span data-oi-i18n="corridorPerformance">Corridor performance</span><strong data-oi-i18n="selectCorridor">Select a corridor</strong></div>
               </div>
             </section>
 
             <section class="card">
-              <p class="eyebrow">Staging-point management</p>
-              <h3>Save current position</h3>
+              <p class="eyebrow" data-oi-i18n="stagingManagement">Staging-point management</p>
+              <h3 data-oi-i18n="saveCurrentPosition">Save current position</h3>
               <div class="intelligence-staging-form">
-                <label><span>Name</span><input id="stagingName" type="text" placeholder="North dinner staging" /></label>
-                <label><span>Notes</span><input id="stagingNotes" type="text" placeholder="Legal marked stalls only" /></label>
-                <label class="checkbox-row"><input id="stagingPreferred" type="checkbox" /><span>Preferred recovery point</span></label>
-                <button id="saveCurrentStaging" class="primary-button" type="button">Save staging point</button>
+                <label><span data-oi-i18n="name">Name</span><input id="stagingName" type="text" placeholder="North dinner staging" data-oi-i18n-placeholder="stagingNamePlaceholder" /></label>
+                <label><span data-oi-i18n="notes">Notes</span><input id="stagingNotes" type="text" placeholder="Legal marked stalls only" data-oi-i18n-placeholder="stagingNotesPlaceholder" /></label>
+                <label class="checkbox-row"><input id="stagingPreferred" type="checkbox" /><span data-oi-i18n="preferredRecovery">Preferred recovery point</span></label>
+                <button id="saveCurrentStaging" class="primary-button" type="button" data-oi-i18n="saveStaging">Save staging point</button>
               </div>
               <div id="stagingManagerList" class="intelligence-staging-list"></div>
             </section>
 
             <section class="card intelligence-data-actions">
-              <p class="eyebrow">Market and history data</p>
+              <p class="eyebrow" data-oi-i18n="marketHistoryData">Market and history data</p>
               <div class="button-row wrap">
-                <button id="exportMarkets" class="secondary-button" type="button">Export markets</button>
-                <label class="ghost-button file-button">Import markets<input id="importMarkets" type="file" accept="application/json,.json" /></label>
+                <button id="exportMarkets" class="secondary-button" type="button" data-oi-i18n="exportMarkets">Export markets</button>
+                <label class="ghost-button file-button"><span data-oi-i18n="importMarkets">Import markets</span><input id="importMarkets" type="file" accept="application/json,.json" /></label>
               </div>
               <div class="button-row wrap">
-                <button id="exportIntelligence" class="secondary-button" type="button">Export history</button>
-                <label class="ghost-button file-button">Import history<input id="importIntelligence" type="file" accept="application/json,.json" /></label>
+                <button id="exportIntelligence" class="secondary-button" type="button" data-oi-i18n="exportHistory">Export history</button>
+                <label class="ghost-button file-button"><span data-oi-i18n="importHistory">Import history</span><input id="importIntelligence" type="file" accept="application/json,.json" /></label>
               </div>
-              <p class="intelligence-privacy">Apex stores market, corridor, POI, staging, and coarse activity references. It does not persist continuous GPS traces or customer addresses through this subsystem.</p>
+              <p class="intelligence-privacy" data-oi-i18n="privacy">Apex stores market, corridor, POI, staging, and coarse activity references. It does not persist continuous GPS traces or customer addresses through this subsystem.</p>
             </section>
           </aside>
         </div>
 
-        <p id="intelligenceStatus" class="intelligence-status" role="status">Loading operational intelligence…</p>
+        <p id="intelligenceStatus" class="intelligence-status" role="status" data-oi-i18n="loadingIntelligence">Loading operational intelligence…</p>
       </article>
     </section>
 
-    <section id="shift" class="tab-panel">
+    <section id="shift" class="tab-panel" role="tabpanel" aria-labelledby="shiftTab" hidden>
       <div class="grid two-column">
         <article class="card">
           <div class="card-heading">
@@ -308,7 +308,7 @@
       </div>
     </section>
 
-    <section id="recovery" class="tab-panel">
+    <section id="recovery" class="tab-panel" role="tabpanel" aria-labelledby="recoveryTab" hidden>
       <div class="grid two-column">
         <article class="card">
           <div class="card-heading">
@@ -341,7 +341,7 @@
       </div>
     </section>
 
-    <section id="settings" class="tab-panel">
+    <section id="settings" class="tab-panel" role="tabpanel" aria-labelledby="settingsTab" hidden>
       <div class="grid two-column">
         <article class="card">
           <p class="eyebrow" data-i18n="navigationPreferences">Navigation preferences</p>
@@ -387,7 +387,6 @@
     <span data-i18n="footerStatement">Controlled decision support. Driver authority remains final.</span>
   </footer>
 
-  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
   <script src="app.js"></script>
   <script type="module" src="modules/intelligence-app.js"></script>
 </body>

@@ -25,6 +25,12 @@ import {
   exportOperationalHistory,
   importOperationalHistory,
 } from "./intelligence.js";
+import {
+  applyIntelligenceTranslations,
+  intelligenceLanguage,
+  oiT,
+  oiTerm,
+} from "./intelligence-i18n.js";
 
 const PENDING_CONTEXT_KEY = "apexDispatch.pendingLocationContext.v1";
 const ACTIVE_CONTEXT_KEY = "apexDispatch.activeLocationContext.v1";
@@ -41,17 +47,19 @@ const state = {
   selected: null,
   settingPickup: false,
   lastEvaluatedFingerprint: null,
+  mapFailureMessage: null,
 };
 
 const $ = (id) => document.getElementById(id);
 
 async function boot() {
   if (!$("operationalMap")) return;
+  applyIntelligenceTranslations();
   bindUi();
-  setStatus("Loading operating markets…");
+  setStatus(oiT("loadingMarkets"));
   try {
     state.markets = await loadMarkets();
-    if (!state.markets.length) throw new Error("No operating markets are configured.");
+    if (!state.markets.length) throw new Error(oiT("noMarkets"));
     populateMarketSelect();
     const preferredId = getActiveMarketId(state.markets[0].id);
     state.market = state.markets.find((market) => market.id === preferredId) || state.markets[0];
@@ -62,7 +70,7 @@ async function boot() {
     bindOfferHistoryIntegration();
     const intelligenceTab = document.querySelector('[data-tab="intelligence"]');
     if (intelligenceTab?.classList.contains("active")) await ensureMap();
-    else setStatus("Open Local Intelligence to initialize the map.");
+    else setStatus(oiT("openIntelligence"));
   } catch (error) {
     handleMapFailure(error);
   }
@@ -86,7 +94,8 @@ function bindUi() {
   $("importMarkets")?.addEventListener("change", uploadMarketImport);
   $("exportIntelligence")?.addEventListener("click", downloadHistoryExport);
   $("importIntelligence")?.addEventListener("change", uploadHistoryImport);
-  document.querySelector('[data-tab="intelligence"]')?.addEventListener("click", () => {
+  window.addEventListener("apex:tabchange", (event) => {
+    if (event.detail?.name !== "intelligence") return;
     requestAnimationFrame(() => {
       ensureMap()
         .then(() => state.map?.resize())
@@ -94,29 +103,31 @@ function bindUi() {
     });
   });
   state.location.addEventListener("position", (event) => applyPosition(event.detail));
-  state.location.addEventListener("error", (event) => setStatus(event.detail.message, "error"));
+  state.location.addEventListener("error", (event) => setStatus(localizeLocationError(event.detail.message), "error"));
   window.addEventListener("storage", (event) => {
     if ([SHIFT_KEY, "apexDispatch.operationalHistory.v1"].includes(event.key)) refreshHistory();
   });
-  window.addEventListener("online", () => setStatus("Connection restored. Basemap data can refresh.", "ok"));
-  window.addEventListener("offline", () => setStatus("Offline mode: operational overlays remain available; the basemap may be unavailable.", "warning"));
+  window.addEventListener("online", () => setStatus(oiT("connectionRestored"), "ok"));
+  window.addEventListener("offline", () => setStatus(oiT("offlineMode"), "warning"));
+  window.addEventListener("apex:languagechange", refreshLanguage);
 }
 
 async function ensureMap() {
   if (state.mapReady && state.map) return state.map;
   if (state.mapPromise) return state.mapPromise;
   state.mapPromise = (async () => {
-    setStatus(`Loading ${state.market.name}…`);
+    setStatus(oiT("loadingMarket", { name: state.market.name }));
     state.map = state.map || new OperationalMap("operationalMap");
     state.map.destroy();
     prepareMapContainer();
     bindMapEvents(state.map);
     await state.map.initialize(state.market, state.history);
     state.mapReady = true;
+    state.mapFailureMessage = null;
     if (state.location.position) state.map.setPosition(state.location.position, { center: false });
     updateSummary();
     renderStagingManager();
-    setStatus(state.map.basemapAvailable ? "Operational intelligence ready." : "Operational overlays loaded in offline basemap mode.", state.map.basemapAvailable ? "ok" : "warning");
+    setStatus(oiT(state.map.basemapAvailable ? "ready" : "offlineBasemap"), state.map.basemapAvailable ? "ok" : "warning");
     return state.map;
   })().finally(() => { state.mapPromise = null; });
   return state.mapPromise;
@@ -136,7 +147,7 @@ function bindMapEvents(map) {
 async function locate() {
   const button = $("locateIntelligence");
   button.disabled = true;
-  setStatus("Requesting current location…");
+  setStatus(oiT("requestingLocation"));
   try {
     try {
       await ensureMap();
@@ -146,7 +157,7 @@ async function locate() {
     const position = await state.location.locate({ maximumAge: 0 });
     applyPosition(position);
   } catch (error) {
-    setStatus(error.message, "error");
+    setStatus(localizeLocationError(error.message), "error");
   } finally {
     button.disabled = false;
   }
@@ -157,13 +168,16 @@ function applyPosition(position) {
   const zone = findZoneAtPoint(state.map?.data?.zones, position);
   const nearest = nearestStagingPoint(state.map?.data?.staging, position);
   const recommendation = recommendRecovery(state.map?.data?.staging, position, state.history);
-  $("currentAreaValue").textContent = zone?.properties?.name || state.market?.name || "Outside configured zones";
-  $("nearestStagingValue").textContent = nearest ? `${nearest.feature.properties.name} · ${nearest.miles.toFixed(1)} mi` : "No staging points configured";
+  $("currentAreaValue").textContent = zone?.properties?.name || state.market?.name || oiT("outsideZones");
+  $("nearestStagingValue").textContent = nearest ? `${nearest.feature.properties.name} · ${nearest.miles.toFixed(1)} mi` : oiT("noStagingConfigured");
   $("recoveryRecommendationValue").textContent = recommendation
-    ? `${recommendation.feature.properties.name} · ${recommendation.miles.toFixed(1)} mi${recommendation.provisional ? " · provisional" : ""}`
-    : "Insufficient data";
-  $("locationTimestamp").textContent = `Updated ${new Date(position.capturedAt).toLocaleTimeString()} · ±${Math.round(position.accuracy)} m`;
-  setStatus("Current location acquired. Coordinates remain in memory unless you save a staging point.", "ok");
+    ? `${recommendation.feature.properties.name} · ${recommendation.miles.toFixed(1)} mi${recommendation.provisional ? ` · ${oiT("provisional")}` : ""}`
+    : oiT("insufficientData");
+  $("locationTimestamp").textContent = oiT("updatedLocation", {
+    time: new Date(position.capturedAt).toLocaleTimeString(intelligenceLanguage()),
+    accuracy: Math.round(position.accuracy),
+  });
+  setStatus(oiT("locationAcquired"), "ok");
 }
 
 async function changeMarket(event) {
@@ -177,7 +191,7 @@ async function changeMarket(event) {
   renderStagingManager();
   try {
     await ensureMap();
-    setStatus(`${market.name} loaded.`, "ok");
+    setStatus(oiT("marketLoaded", { name: market.name }), "ok");
   } catch (error) {
     handleMapFailure(error);
   }
@@ -189,13 +203,15 @@ function prepareMapContainer() {
   container.replaceChildren();
   container.classList.remove("operational-map--fallback");
   container.setAttribute("role", "application");
-  container.setAttribute("aria-label", "Local operating intelligence map");
+  container.setAttribute("aria-label", oiT("mapAria"));
 }
 
 function handleMapFailure(error) {
-  const message = error?.message || "Operational intelligence failed to initialize.";
+  const rawMessage = error?.message || "";
+  const message = localizeMapError(rawMessage);
   console.warn(message);
   state.mapReady = false;
+  state.mapFailureMessage = rawMessage;
   state.map?.destroy();
   updateSummary();
   renderStagingManager();
@@ -205,18 +221,18 @@ function handleMapFailure(error) {
     container.replaceChildren();
     container.classList.add("operational-map--fallback");
     container.setAttribute("role", "status");
-    container.setAttribute("aria-label", "Interactive map unavailable");
+    container.setAttribute("aria-label", oiT("mapUnavailable"));
     const fallback = document.createElement("div");
     fallback.className = "operational-map-fallback";
     const heading = document.createElement("strong");
-    heading.textContent = "Interactive map unavailable";
+    heading.textContent = oiT("mapUnavailable");
     const detail = document.createElement("span");
-    detail.textContent = "Market overlays and operational summaries remain available. Enable WebGL and reload Apex to restore the map.";
+    detail.textContent = oiT("mapUnavailableDetail");
     fallback.append(heading, detail);
     container.append(fallback);
   }
 
-  setStatus(`${message} Overlay data remains available without the interactive map.`, "warning");
+  setStatus(oiT("overlayFallback", { message }), "warning");
 }
 
 function handleSelection(selection) {
@@ -228,17 +244,17 @@ function handleSelection(selection) {
 
 function renderSelection(selection) {
   if (!selection) {
-    $("selectionType").textContent = "No selection";
-    $("selectionName").textContent = "Select a zone, corridor, merchant cluster, or staging point";
-    $("selectionDetails").textContent = "Map selections can populate the offer pickup, add a recovery point, or show corridor performance.";
+    $("selectionType").textContent = oiT("noSelection");
+    $("selectionName").textContent = oiT("selectionPrompt");
+    $("selectionDetails").textContent = oiT("selectionHelp");
     $("useSelectionAsPickup").disabled = true;
     $("useSelectionAsRecovery").disabled = true;
     clearCorridorMetrics();
     return;
   }
   const properties = selection.feature.properties || {};
-  $("selectionType").textContent = titleCase(selection.type);
-  $("selectionName").textContent = properties.name || properties.id || "Selected map feature";
+  $("selectionType").textContent = oiTerm(selection.type, "type");
+  $("selectionName").textContent = properties.name || properties.id || oiT("selectedFeature");
   $("selectionDetails").textContent = selectionDescription(selection);
   $("useSelectionAsPickup").disabled = !["poi", "staging"].includes(selection.type);
   $("useSelectionAsRecovery").disabled = selection.type !== "staging";
@@ -246,11 +262,31 @@ function renderSelection(selection) {
 
 function selectionDescription(selection) {
   const properties = selection.feature.properties || {};
-  if (selection.type === "zone") return `${titleCase(properties.classification || "operating")} zone · minimum gross per mile $${Number(properties.minimumGrossPerMile || 0).toFixed(2)}`;
-  if (selection.type === "corridor") return `${titleCase(properties.classification || "commercial")} corridor · ${properties.notes || "Operational corridor"}`;
-  if (selection.type === "poi") return `${titleCase(properties.category || "merchant")} · ${properties.address || "Curated commercial point"}`;
-  if (selection.type === "staging") return `${properties.zoneId || "Unassigned zone"} · ${properties.notes || "Approved staging point"}`;
-  return properties.notes || "Operational map feature";
+  if (selection.type === "zone") {
+    return oiT("zoneDescription", {
+      classification: oiTerm(properties.classification || "operating", "class"),
+      amount: Number(properties.minimumGrossPerMile || 0).toFixed(2),
+    });
+  }
+  if (selection.type === "corridor") {
+    return oiT("corridorDescription", {
+      classification: oiTerm(properties.classification || "commercial", "class"),
+      notes: properties.notes || oiT("operationalCorridor"),
+    });
+  }
+  if (selection.type === "poi") {
+    return oiT("poiDescription", {
+      category: oiTerm(properties.category || "merchant", "category"),
+      address: properties.address || oiT("curatedPoint"),
+    });
+  }
+  if (selection.type === "staging") {
+    return oiT("stagingDescription", {
+      zone: properties.zoneId || oiT("unassignedZone"),
+      notes: properties.notes || oiT("approvedStaging"),
+    });
+  }
+  return properties.notes || oiT("operationalFeature");
 }
 
 function useSelectionAsPickup() {
@@ -263,7 +299,7 @@ function useSelectionAsPickup() {
   input.dispatchEvent(new Event("input", { bubbles: true }));
   state.settingPickup = false;
   savePendingContext(buildLocationContext(state.selected));
-  setStatus("Map selection assigned as the offer pickup.", "ok");
+  setStatus(oiT("pickupAssigned"), "ok");
 }
 
 function useSelectionAsRecovery() {
@@ -272,13 +308,13 @@ function useSelectionAsRecovery() {
   const coordinates = state.selected.feature.geometry?.coordinates || [];
   const form = $("recoveryPointForm");
   if (!form) {
-    setStatus("Recovery form is unavailable.", "error");
+    setStatus(oiT("recoveryFormUnavailable"), "error");
     return;
   }
   $("recoveryPointId").value = `intelligence-${properties.id}`;
-  $("recoveryPointName").value = properties.name || "Operational staging point";
+  $("recoveryPointName").value = properties.name || oiT("operationalStaging");
   $("recoveryPointAddress").value = properties.address || `${Number(coordinates[1]).toFixed(6)}, ${Number(coordinates[0]).toFixed(6)}`;
-  $("recoveryPointParking").value = properties.notes || "Use a legal marked stall and verify posted restrictions.";
+  $("recoveryPointParking").value = properties.notes || oiT("parkingDefault");
   $("recoveryPointPreferred").checked = Boolean(properties.preferred);
   $("recoveryPointActive").checked = properties.active !== false;
   form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
@@ -289,17 +325,17 @@ function useSelectionAsRecovery() {
     recoveryStagingPointId: properties.id || null,
   };
   savePendingContext(context);
-  setStatus("Staging point added to the Apex recovery network.", "ok");
+  setStatus(oiT("recoveryAdded"), "ok");
 }
 
 async function saveCurrentStaging() {
   if (!state.location.position) {
-    setStatus("Use Locate Me before saving a staging point.", "error");
+    setStatus(oiT("locateBeforeSaving"), "error");
     return;
   }
   const name = $("stagingName").value.trim();
   if (!name) {
-    setStatus("Enter a staging point name.", "error");
+    setStatus(oiT("enterStagingName"), "error");
     $("stagingName").focus();
     return;
   }
@@ -321,7 +357,7 @@ async function saveCurrentStaging() {
     $("stagingPreferred").checked = false;
     await state.map?.refreshStaging();
     renderStagingManager();
-    setStatus("Staging point saved locally and added to the map.", "ok");
+    setStatus(oiT("stagingSaved"), "ok");
   } catch (error) {
     setStatus(error.message, "error");
   }
@@ -331,17 +367,17 @@ async function manageStagingList(event) {
   const remove = event.target.closest("[data-delete-staging]");
   const preferred = event.target.closest("[data-prefer-staging]");
   if (remove) {
-    if (!confirm("Delete this locally saved staging point?")) return;
+    if (!confirm(oiT("confirmDeleteStaging"))) return;
     deleteStagingPoint(remove.dataset.deleteStaging);
     await state.map?.refreshStaging();
     renderStagingManager();
-    setStatus("Staging point deleted.", "ok");
+    setStatus(oiT("stagingDeleted"), "ok");
   }
   if (preferred) {
     setStagingPreference(preferred.dataset.preferStaging, preferred.dataset.preferred !== "true");
     await state.map?.refreshStaging();
     renderStagingManager();
-    setStatus("Staging preference updated.", "ok");
+    setStatus(oiT("stagingPreferenceUpdated"), "ok");
   }
 }
 
@@ -350,16 +386,16 @@ function renderStagingManager() {
   if (!list || !state.market) return;
   const points = userStagingPoints(state.market.id);
   if (!points.length) {
-    list.innerHTML = '<p class="empty-state">No locally saved staging points.</p>';
+    list.innerHTML = `<p class="empty-state">${escapeHtml(oiT("noSavedStaging"))}</p>`;
     return;
   }
   list.innerHTML = points.map((feature) => {
     const properties = feature.properties || {};
     return `<article class="intelligence-staging-item">
-      <div><strong>${escapeHtml(properties.name)}</strong><span>${escapeHtml(properties.zoneId || "Unassigned zone")}${properties.preferred ? " · Preferred" : ""}</span></div>
+      <div><strong>${escapeHtml(properties.name)}</strong><span>${escapeHtml(properties.zoneId || oiT("unassignedZone"))}${properties.preferred ? ` · ${escapeHtml(oiT("preferred"))}` : ""}</span></div>
       <div class="button-row wrap">
-        <button type="button" class="text-button" data-prefer-staging="${escapeHtml(properties.id)}" data-preferred="${Boolean(properties.preferred)}">${properties.preferred ? "Remove preference" : "Prefer"}</button>
-        <button type="button" class="text-button" data-delete-staging="${escapeHtml(properties.id)}">Delete</button>
+        <button type="button" class="text-button" data-prefer-staging="${escapeHtml(properties.id)}" data-preferred="${Boolean(properties.preferred)}">${escapeHtml(properties.preferred ? oiT("removePreference") : oiT("prefer"))}</button>
+        <button type="button" class="text-button" data-delete-staging="${escapeHtml(properties.id)}">${escapeHtml(oiT("delete"))}</button>
       </div>
     </article>`;
   }).join("");
@@ -378,7 +414,7 @@ function applyMarketScoring() {
   };
   Object.entries(values).forEach(([id, value]) => { if ($(id)) $(id).value = value; });
   $("economicsForm")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-  setStatus(`${state.market.name} scoring profile applied.`, "ok");
+  setStatus(oiT("scoringApplied", { name: state.market.name }), "ok");
 }
 
 function bindOfferHistoryIntegration() {
@@ -529,21 +565,28 @@ function readPendingContext() {
 function renderCorridorMetrics(corridorId) {
   const metrics = corridorMetrics(state.history, corridorId);
   $("corridorMetrics").innerHTML = `
-    <div><span>Offers</span><strong>${metrics.offers}</strong></div>
-    <div><span>Completed</span><strong>${metrics.completed}</strong></div>
-    <div><span>Gross / mile</span><strong>${metrics.grossPerMile === null ? "—" : `$${metrics.grossPerMile.toFixed(2)}`}</strong></div>
-    <div><span>Gross / hour</span><strong>${metrics.grossPerHour === null ? "—" : `$${metrics.grossPerHour.toFixed(2)}`}</strong></div>`;
+    <div><span>${escapeHtml(oiT("offers"))}</span><strong>${metrics.offers}</strong></div>
+    <div><span>${escapeHtml(oiT("completed"))}</span><strong>${metrics.completed}</strong></div>
+    <div><span>${escapeHtml(oiT("grossPerMile"))}</span><strong>${metrics.grossPerMile === null ? "—" : `$${metrics.grossPerMile.toFixed(2)}`}</strong></div>
+    <div><span>${escapeHtml(oiT("grossPerHour"))}</span><strong>${metrics.grossPerHour === null ? "—" : `$${metrics.grossPerHour.toFixed(2)}`}</strong></div>`;
 }
 
 function clearCorridorMetrics() {
-  $("corridorMetrics").innerHTML = '<div><span>Corridor performance</span><strong>Select a corridor</strong></div>';
+  $("corridorMetrics").innerHTML = `<div><span>${escapeHtml(oiT("corridorPerformance"))}</span><strong>${escapeHtml(oiT("selectCorridor"))}</strong></div>`;
 }
 
 function updateSummary() {
   const data = state.map?.data || {};
-  $("visibleIntelligenceValue").textContent = `${data.pois?.features?.length || 0} POIs · ${data.corridors?.features?.length || 0} corridors · ${data.staging?.features?.length || 0} staging points`;
-  $("historyCountValue").textContent = `${state.history.filter((entry) => String(entry.status).toLowerCase() === "completed").length} completed · ${state.history.length} total records`;
-  $("marketTimezoneValue").textContent = state.market ? `${state.market.name} · ${state.market.timezone}` : "No market";
+  $("visibleIntelligenceValue").textContent = oiT("visibleCounts", {
+    pois: data.pois?.features?.length || 0,
+    corridors: data.corridors?.features?.length || 0,
+    staging: data.staging?.features?.length || 0,
+  });
+  $("historyCountValue").textContent = oiT("historyCounts", {
+    completed: state.history.filter((entry) => String(entry.status).toLowerCase() === "completed").length,
+    total: state.history.length,
+  });
+  $("marketTimezoneValue").textContent = state.market ? `${state.market.name} · ${state.market.timezone}` : oiT("noMarket");
 }
 
 function populateMarketSelect() {
@@ -561,7 +604,7 @@ async function uploadMarketImport(event) {
     importMarkets(await file.text());
     state.markets = await loadMarkets();
     populateMarketSelect();
-    setStatus("Markets imported. Select a market to load it.", "ok");
+    setStatus(oiT("marketsImported"), "ok");
   } catch (error) {
     setStatus(error.message, "error");
   } finally {
@@ -579,7 +622,7 @@ async function uploadHistoryImport(event) {
   try {
     importOperationalHistory(await file.text());
     refreshHistory();
-    setStatus("Operational history imported.", "ok");
+    setStatus(oiT("historyImported"), "ok");
   } catch (error) {
     setStatus(error.message, "error");
   } finally {
@@ -592,6 +635,7 @@ async function syncOfflineData() {
   const urls = [
     "./operational-intelligence.css",
     "./modules/intelligence-app.js",
+    "./modules/intelligence-i18n.js",
     "./modules/map.js",
     "./modules/location.js",
     "./modules/markets.js",
@@ -605,15 +649,62 @@ async function syncOfflineData() {
   ];
   try {
     await Promise.all(urls.map((url) => fetch(url, { cache: "reload" }).then((response) => {
-      if (!response.ok) throw new Error(`Unable to cache ${url}`);
+      if (!response.ok) throw new Error(oiT("unableToCache", { url }));
       return response;
     })));
     const registration = await navigator.serviceWorker?.ready;
     registration?.active?.postMessage({ type: "CACHE_OPERATIONAL_DATA", urls });
-    setStatus("Operational overlays synchronized for offline use. Basemap tiles are not bulk-cached.", "ok");
+    setStatus(oiT("offlineSynced"), "ok");
   } catch (error) {
-    setStatus(`Offline synchronization failed: ${error.message}`, "error");
+    setStatus(oiT("offlineSyncFailed", { message: error.message }), "error");
   }
+}
+
+function refreshLanguage() {
+  applyIntelligenceTranslations();
+  renderSelection(state.selected);
+  if (state.selected?.type === "corridor") renderCorridorMetrics(state.selected.feature.properties?.id);
+  else clearCorridorMetrics();
+  renderStagingManager();
+  updateSummary();
+
+  const mapContainer = $("operationalMap");
+  mapContainer?.setAttribute("aria-label", oiT(mapContainer.classList.contains("operational-map--fallback") ? "mapUnavailable" : "mapAria"));
+  if (mapContainer?.classList.contains("operational-map--fallback")) {
+    const heading = mapContainer.querySelector("strong");
+    const detail = mapContainer.querySelector("span");
+    if (heading) heading.textContent = oiT("mapUnavailable");
+    if (detail) detail.textContent = oiT("mapUnavailableDetail");
+    setStatus(oiT("overlayFallback", {
+      message: localizeMapError(state.mapFailureMessage),
+    }), "warning");
+  } else if (state.mapReady) {
+    setStatus(oiT(state.map?.basemapAvailable ? "ready" : "offlineBasemap"), state.map?.basemapAvailable ? "ok" : "warning");
+  } else {
+    setStatus(oiT("openIntelligence"));
+  }
+
+  if (state.location.position) applyPosition(state.location.position);
+}
+
+function localizeMapError(message) {
+  const value = String(message || "");
+  if (!value) return oiT("initializationFailed");
+  if (/WebGL/i.test(value) && /unavailable|requires/i.test(value)) return oiT("webGlUnavailable");
+  if (/MapLibre|map library/i.test(value)) return oiT("mapLibraryFailed");
+  if (/could not initialize|timed out/i.test(value)) return oiT("mapInitializeFailed");
+  return value;
+}
+
+function localizeLocationError(message) {
+  const value = String(message || "");
+  if (/requires HTTPS/i.test(value)) return oiT("locationHttps");
+  if (/not supported/i.test(value)) return oiT("geolocationUnsupported");
+  if (/permission was denied/i.test(value)) return oiT("locationDenied");
+  if (/unavailable/i.test(value)) return oiT("locationUnavailable");
+  if (/timed out/i.test(value)) return oiT("locationTimeout");
+  if (/retrieve the current location/i.test(value)) return oiT("locationUnknown");
+  return value || oiT("locationUnknown");
 }
 
 function setStatus(message, tone = "neutral") {
@@ -635,7 +726,6 @@ function downloadText(text, filename, type) {
 function numericInput(id) { const value = Number($(id)?.value); return Number.isFinite(value) ? value : 0; }
 function numericText(value) { const match = String(value || "").replace(/,/g, "").match(/-?\d+(?:\.\d+)?/); return match ? Number(match[0]) : 0; }
 function readJson(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch { return fallback; } }
-function titleCase(value) { return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (character) => character.toUpperCase()); }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character])); }
 function dateStamp() { return new Date().toISOString().slice(0, 10); }
 
