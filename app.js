@@ -73,8 +73,8 @@
 
   const translations = {
     en: {
-      brandEyebrow: "Route intelligence", language: "Language", routeUnchecked: "Route service unchecked", routeOnline: "Route service online", routeOffline: "Route service unavailable",
-      shiftOff: "Shift off", shiftActive: "Shift active", shiftBreak: "On break", install: "Install", dispatchTab: "Dispatch", shiftTab: "Shift", recoveryTab: "Recovery", settingsTab: "Settings",
+      brandEyebrow: "Route intelligence", language: "Language", primaryNavigation: "Primary navigation", routeUnchecked: "Route service unchecked", routeReachable: "Route endpoint reachable", routeOnline: "Route service online", routeOffline: "Route service unavailable",
+      shiftOff: "Shift off", shiftActive: "Shift active", shiftBreak: "On break", install: "Install", dispatchTab: "Dispatch", intelligenceTab: "Intelligence", shiftTab: "Shift", recoveryTab: "Recovery", settingsTab: "Settings",
       decisionSupport: "Decision support only.", decisionSupportDetail: "The driver controls the vehicle and the connected delivery platform. Apex calculates the route, profitability, alerts, and exact recovery point.",
       incomingOffer: "Incoming offer", threeInputs: "Three inputs. Apex calculates the rest.", reset: "Reset", payoutLabel: "Offer payout", pickupLabel: "Pickup location", dropoffLabel: "Drop-off location",
       pickupPlaceholder: "Business name or full address", dropoffPlaceholder: "Full destination address", startingPoint: "Starting point", gpsNotSet: "Current position not set", useCurrentPosition: "Use current position", enterAddress: "Enter address", useGpsInstead: "Use GPS instead", startingAddress: "Starting address", startingPlaceholder: "Full starting address", analyzeOffer: "Analyze offer", readyForInputs: "Enter the offer and use your current position.",
@@ -92,12 +92,12 @@
       recoveryEtaText: "Arrive about {time} · {miles} mi · {minutes} min", legMetric: "{miles} mi · {minutes} min", totalTimeValue: "{minutes} min", trafficValue: "+{minutes} min",
       voiceAccept: "Accept. {miles} total miles and about {minutes} minutes. Recover at {name}, {address}. {parking}", voiceMaybe: "Maybe. Review the alerts. {miles} total miles and about {minutes} minutes. Recovery is {name}, {address}. {parking}", voiceDecline: "Decline. The route does not meet the operating thresholds.",
       guidanceStarting: "Starting guidance to {destination}.", guidanceActive: "Guidance to {destination}", guidanceArrived: "You have arrived at {destination}.", guidanceUnavailable: "Spoken guidance is unavailable for this route.", guidanceOff: "Spoken guidance is disabled in Settings.", guidanceStopped: "Guidance stopped.", inDistance: "In {distance}, {instruction}", continueInstruction: "Continue on the current road.", locationLost: "Location signal is unavailable. Keep Apex open and check location permissions.",
-      serviceOnline: "Service online.", serviceNotConfigured: "Service is online but the route key is not configured.", serviceTestFailed: "Service test failed.", activeStarted: "Offer accepted. Delivery timer started.", completed: "Delivery completed and logged.", declinedLogged: "Decline logged.", shiftStarted: "Shift started.", breakStarted: "Break started.", breakEnded: "Break ended.", shiftEnded: "Shift ended.",
-      completedStatus: "Completed", declinedStatus: "Declined", acceptedStatus: "Accepted", exactCoordinates: "Coordinates: {lat}, {lng}", noAddressOrGps: "Enter a full address or save the current position.", noVoiceSupport: "Voice is not supported on this device.", routeServiceError: "Route calculation failed: {message}",
+      serviceOnline: "Service online.", serviceReachable: "The route endpoint is reachable. Provider access is verified during analysis.", serviceNotConfigured: "The route endpoint is online, but no provider key is present.", serviceTestFailed: "Service test failed.", activeStarted: "Offer accepted. Delivery timer started.", completed: "Delivery completed and logged.", declinedLogged: "Decline logged.", shiftStarted: "Shift started.", breakStarted: "Break started.", breakEnded: "Break ended.", shiftEnded: "Shift ended.",
+      completedStatus: "Completed", declinedStatus: "Declined", acceptedStatus: "Accepted", exactCoordinates: "Coordinates: {lat}, {lng}", noAddressOrGps: "Enter a full address or save the current position.", noVoiceSupport: "Voice is not supported on this device.", providerRejected: "The routing provider rejected the request. Check its API credentials and configuration.", routeServiceError: "Route calculation failed: {message}",
     },
     "es-NI": {
-      brandEyebrow: "Inteligencia de rutas", language: "Idioma", routeUnchecked: "Servicio de rutas sin verificar", routeOnline: "Servicio de rutas activo", routeOffline: "Servicio de rutas no disponible",
-      shiftOff: "Turno apagado", shiftActive: "Turno activo", shiftBreak: "En descanso", install: "Instalar", dispatchTab: "Despacho", shiftTab: "Turno", recoveryTab: "Recuperación", settingsTab: "Ajustes",
+      brandEyebrow: "Inteligencia de rutas", language: "Idioma", primaryNavigation: "Navegación principal", routeUnchecked: "Servicio de rutas sin verificar", routeReachable: "Punto de rutas accesible", routeOnline: "Servicio de rutas activo", routeOffline: "Servicio de rutas no disponible",
+      shiftOff: "Turno apagado", shiftActive: "Turno activo", shiftBreak: "En descanso", install: "Instalar", dispatchTab: "Despacho", intelligenceTab: "Inteligencia", shiftTab: "Turno", recoveryTab: "Recuperación", settingsTab: "Ajustes",
       decisionSupport: "Solo apoyo para decidir.", decisionSupportDetail: "La persona que maneja controla el vehículo y la plataforma conectada. Apex calcula la ruta, rentabilidad, alertas y el punto exacto de recuperación.",
       incomingOffer: "Oferta entrante", threeInputs: "Tres datos. Apex calcula lo demás.", reset: "Limpiar", payoutLabel: "Pago de la oferta", pickupLabel: "Punto de recogida", dropoffLabel: "Punto de entrega",
       pickupPlaceholder: "Nombre del negocio o dirección completa", dropoffPlaceholder: "Dirección completa del destino", startingPoint: "Punto de salida", gpsNotSet: "Ubicación actual no definida", useCurrentPosition: "Usar ubicación actual", enterAddress: "Escribir dirección", useGpsInstead: "Usar GPS", startingAddress: "Dirección de salida", startingPlaceholder: "Dirección completa de salida", analyzeOffer: "Analizar oferta", readyForInputs: "Ingresá la oferta y usá tu ubicación actual.",
@@ -115,8 +115,8 @@
       recoveryEtaText: "Llegada aproximada {time} · {miles} mi · {minutes} min", legMetric: "{miles} mi · {minutes} min", totalTimeValue: "{minutes} min", trafficValue: "+{minutes} min",
       voiceAccept: "Aceptá. {miles} millas totales y aproximadamente {minutes} minutos. Recuperate en {name}, {address}. {parking}", voiceMaybe: "Quizás. Revisá las alertas. {miles} millas totales y aproximadamente {minutes} minutos. Recuperate en {name}, {address}. {parking}", voiceDecline: "Rechazá. La ruta no cumple las metas operativas.",
       guidanceStarting: "Iniciando guía hacia {destination}.", guidanceActive: "Guía hacia {destination}", guidanceArrived: "Llegaste a {destination}.", guidanceUnavailable: "No hay instrucciones habladas disponibles para esta ruta.", guidanceOff: "La guía hablada está desactivada en Ajustes.", guidanceStopped: "Guía detenida.", inDistance: "En {distance}, {instruction}", continueInstruction: "Continuá por la vía actual.", locationLost: "No hay señal de ubicación. Mantené Apex abierto y revisá los permisos.",
-      serviceOnline: "Servicio activo.", serviceNotConfigured: "El servicio está activo, pero la clave de rutas no está configurada.", serviceTestFailed: "Falló la prueba del servicio.", activeStarted: "Oferta aceptada. Temporizador iniciado.", completed: "Entrega completada y registrada.", declinedLogged: "Rechazo registrado.", shiftStarted: "Turno iniciado.", breakStarted: "Descanso iniciado.", breakEnded: "Descanso terminado.", shiftEnded: "Turno terminado.",
-      completedStatus: "Completada", declinedStatus: "Rechazada", acceptedStatus: "Aceptada", exactCoordinates: "Coordenadas: {lat}, {lng}", noAddressOrGps: "Ingresá una dirección completa o guardá la ubicación actual.", noVoiceSupport: "Este dispositivo no admite voz.", routeServiceError: "Falló el cálculo de la ruta: {message}",
+      serviceOnline: "Servicio activo.", serviceReachable: "El punto de rutas responde. El acceso al proveedor se verifica durante el análisis.", serviceNotConfigured: "El punto de rutas está activo, pero no hay una clave del proveedor.", serviceTestFailed: "Falló la prueba del servicio.", activeStarted: "Oferta aceptada. Temporizador iniciado.", completed: "Entrega completada y registrada.", declinedLogged: "Rechazo registrado.", shiftStarted: "Turno iniciado.", breakStarted: "Descanso iniciado.", breakEnded: "Descanso terminado.", shiftEnded: "Turno terminado.",
+      completedStatus: "Completada", declinedStatus: "Rechazada", acceptedStatus: "Aceptada", exactCoordinates: "Coordenadas: {lat}, {lng}", noAddressOrGps: "Ingresá una dirección completa o guardá la ubicación actual.", noVoiceSupport: "Este dispositivo no admite voz.", providerRejected: "El proveedor de rutas rechazó la solicitud. Revisá sus credenciales y configuración de API.", routeServiceError: "Falló el cálculo de la ruta: {message}",
     },
   };
 
@@ -158,6 +158,15 @@
   const oneDecimal = (value) => Number(value || 0).toFixed(1);
   const routeWorkerBase = () => String(settings.routesWorkerUrl || "").trim().replace(/\/+$/, "");
 
+  class ApiRequestError extends Error {
+    constructor(message, status, code) {
+      super(message);
+      this.name = "ApiRequestError";
+      this.status = Number(status || 0);
+      this.code = String(code || "");
+    }
+  }
+
   function loadJson(key, fallback) {
     try {
       const raw = localStorage.getItem(key);
@@ -191,12 +200,15 @@
     });
     $("languageSelect").value = settings.language;
     $("settingsLanguage").value = settings.language;
+    document.querySelector(".language-control")?.setAttribute("aria-label", t("language"));
+    document.querySelector(".tab-bar")?.setAttribute("aria-label", t("primaryNavigation"));
     renderShift();
     renderRecoveryPoints();
     if (lastAnalysis) renderAnalysis(lastAnalysis, { speak: false });
     else resetResultView();
     renderOriginSummary();
     renderGuidanceStatus();
+    window.dispatchEvent(new CustomEvent("apex:languagechange", { detail: { language: settings.language } }));
   }
 
   function readNumber(id, fallback = 0) {
@@ -274,8 +286,22 @@
     });
     let body = null;
     try { body = await response.json(); } catch { body = null; }
-    if (!response.ok) throw new Error(body?.error || `HTTP ${response.status}`);
+    const legacyProviderRejection = response.status === 400 && body?.error === "Routing service error 400.";
+    if (!response.ok) {
+      throw new ApiRequestError(
+        legacyProviderRejection ? t("providerRejected") : body?.error || `HTTP ${response.status}`,
+        response.status,
+        body?.code || (legacyProviderRejection ? "ROUTING_PROVIDER_REJECTED" : ""),
+      );
+    }
     return body;
+  }
+
+  function serviceFailed(error) {
+    if (!(error instanceof ApiRequestError)) return true;
+    if (error.status >= 500 || error.status === 429) return true;
+    return ["API_KEY_INVALID", "API_KEY_SERVICE_BLOCKED", "PERMISSION_DENIED", "UNAUTHENTICATED", "ROUTING_PROVIDER_REJECTED"]
+      .includes(error.code);
   }
 
   async function getCurrentPosition(options = {}) {
@@ -398,11 +424,13 @@
       lastAnalysis = evaluateOffer({ payout, pickupText, dropoffText, plan, recovery });
       renderAnalysis(lastAnalysis, { speak: true });
       setStatus(t("routeReady"), "good");
+      setServiceStatus(t("routeOnline"), "good");
     } catch (error) {
       const message = t("routeServiceError", { message: error.message });
+      const failed = serviceFailed(error);
       setStatus(message, "bad");
       notify(message, "bad", true);
-      setServiceStatus(t("routeOffline"), "bad");
+      setServiceStatus(failed ? t("routeOffline") : t("routeReachable"), failed ? "bad" : "good");
     } finally {
       routeState.calculating = false;
       $("analyzeOffer").disabled = false;
@@ -503,6 +531,8 @@
     $("toDropoffMetric").textContent = t("legMetric", { miles: oneDecimal(dropoffRoute?.miles || 0), minutes: Math.ceil(dropoffRoute?.minutes || 0) });
     $("toRecoveryMetric").textContent = t("legMetric", { miles: oneDecimal(recoveryRoute?.miles || 0), minutes: Math.ceil(recoveryRoute?.minutes || 0) });
     $("routeLegs").hidden = false;
+    $("routingAttribution").textContent = `Powered by Google, ©${new Date().getFullYear()} Google`;
+    $("routingAttribution").hidden = false;
 
     clearAlerts();
     analysis.alerts.forEach((alert) => addAlert(alert.text, alert.tone));
@@ -531,6 +561,7 @@
     $("recoveryParking").textContent = t("recoveryPending");
     $("recoveryEta").textContent = "—";
     $("routeLegs").hidden = true;
+    $("routingAttribution").hidden = true;
     $("routeFreshnessBadge").textContent = t("noRoute");
     $("routeFreshnessBadge").className = "mini-pill neutral";
     ["guidePickup", "guideDropoff", "guideRecovery", "acceptOffer", "declineOffer", "refreshRoute"].forEach((id) => { $(id).disabled = true; });
@@ -1034,10 +1065,10 @@
       const response = await fetch(`${url}/health`, { cache: "no-store" });
       const body = await response.json();
       if (!response.ok || !body.ok) throw new Error(body.error || `HTTP ${response.status}`);
-      const configured = body.providerConfigured ?? body.routesApiConfigured;
-      $("routesApiTestResult").textContent = configured ? t("serviceOnline") : t("serviceNotConfigured");
-      setServiceStatus(configured ? t("routeOnline") : t("routeOffline"), configured ? "good" : "bad");
-      if (!options.silent && settings.voiceAlerts) speak(configured ? t("serviceOnline") : t("serviceNotConfigured"));
+      const keyPresent = body.providerKeyPresent ?? body.providerConfigured ?? body.routesApiConfigured;
+      $("routesApiTestResult").textContent = keyPresent ? t("serviceReachable") : t("serviceNotConfigured");
+      setServiceStatus(keyPresent ? t("routeReachable") : t("routeOffline"), keyPresent ? "good" : "bad");
+      if (!options.silent && settings.voiceAlerts) speak(keyPresent ? t("serviceReachable") : t("serviceNotConfigured"));
     } catch {
       $("routesApiTestResult").textContent = t("serviceTestFailed");
       setServiceStatus(t("routeOffline"), "bad");
@@ -1079,12 +1110,36 @@
   }
 
   function activateTab(name) {
-    document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === name));
-    document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.toggle("active", panel.id === name));
+    document.querySelectorAll(".tab").forEach((tab) => {
+      const active = tab.dataset.tab === name;
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", String(active));
+      tab.tabIndex = active ? 0 : -1;
+    });
+    document.querySelectorAll(".tab-panel").forEach((panel) => {
+      const active = panel.id === name;
+      panel.classList.toggle("active", active);
+      panel.hidden = !active;
+    });
+    window.dispatchEvent(new CustomEvent("apex:tabchange", { detail: { name } }));
   }
 
   function setupEvents() {
     document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => activateTab(button.dataset.tab)));
+    document.querySelector(".tab-bar")?.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      const tabs = [...document.querySelectorAll(".tab")];
+      const current = tabs.indexOf(document.activeElement);
+      if (current < 0) return;
+      event.preventDefault();
+      const next = event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? tabs.length - 1
+          : (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+      activateTab(tabs[next].dataset.tab);
+      tabs[next].focus();
+    });
     $("offerForm").addEventListener("submit", (event) => { event.preventDefault(); analyzeOffer(); });
     $("resetOffer").addEventListener("click", resetOffer);
     $("useCurrentLocation").addEventListener("click", useCurrentLocationForOrigin);

@@ -1,4 +1,4 @@
-const CACHE_NAME = "apex-dispatch-v3-bendesk-4";
+const CACHE_NAME = "apex-dispatch-v3-bendesk-5";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,6 +8,7 @@ const APP_SHELL = [
   "./icon.svg",
   "./operational-intelligence.css",
   "./modules/intelligence-app.js",
+  "./modules/intelligence-i18n.js",
   "./modules/map.js",
   "./modules/location.js",
   "./modules/markets.js",

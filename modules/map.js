@@ -4,6 +4,10 @@ import { loadPois, addPoiLayers, filterPois } from "./pois.js";
 import { loadStagingPoints, addStagingLayers } from "./staging.js";
 import { addHeatmapLayer, buildHeatmapGeoJson } from "./intelligence.js";
 
+const MAPLIBRE_VERSION = "5.24.0";
+const MAPLIBRE_BASE_URL = `https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist`;
+let mapLibrePromise = null;
+
 const OFFLINE_STYLE = {
   version: 8,
   name: "Apex Offline",
@@ -36,12 +40,15 @@ export class OperationalMap extends EventTarget {
     ]);
     this.data = { zones, corridors, pois, staging };
 
-    if (!window.maplibregl) throw new Error("MapLibre failed to load.");
+    if (!supportsWebGl()) {
+      throw new Error("Interactive mapping requires WebGL, which is unavailable in this browser.");
+    }
+    const maplibregl = await loadMapLibre();
     if (typeof maplibregl.supported === "function" && !maplibregl.supported()) {
       throw new Error("Interactive mapping requires WebGL, which is unavailable in this browser.");
     }
 
-    const mapResult = await createMapWithFallback(this.containerId, market);
+    const mapResult = await createMapWithFallback(this.containerId, market, maplibregl);
     this.map = mapResult.map;
     this.basemapAvailable = mapResult.basemapAvailable;
     this.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
@@ -74,7 +81,7 @@ export class OperationalMap extends EventTarget {
       const element = document.createElement("div");
       element.className = "apex-location-marker";
       element.setAttribute("aria-label", "Current location");
-      this.locationMarker = new maplibregl.Marker({ element }).setLngLat(coordinates).addTo(this.map);
+      this.locationMarker = new window.maplibregl.Marker({ element }).setLngLat(coordinates).addTo(this.map);
     } else {
       this.locationMarker.setLngLat(coordinates);
     }
@@ -135,7 +142,7 @@ export class OperationalMap extends EventTarget {
   }
 }
 
-async function createMapWithFallback(container, market) {
+async function createMapWithFallback(container, market, maplibregl) {
   const options = {
     container,
     style: market.mapStyle || "https://tiles.openfreemap.org/styles/liberty",
@@ -160,6 +167,64 @@ async function createMapWithFallback(container, market) {
       throw new Error("Interactive mapping could not initialize. Verify that WebGL is enabled and reload Apex.", { cause: primaryError });
     }
   }
+}
+
+function supportsWebGl() {
+  try {
+    const canvas = document.createElement("canvas");
+    return Boolean(canvas.getContext("webgl2") || canvas.getContext("webgl"));
+  } catch {
+    return false;
+  }
+}
+
+async function loadMapLibre() {
+  if (!mapLibrePromise) {
+    mapLibrePromise = Promise.all([
+      loadMapLibreAsset("style", `${MAPLIBRE_BASE_URL}/maplibre-gl.css`),
+      window.maplibregl
+        ? Promise.resolve()
+        : loadMapLibreAsset("script", `${MAPLIBRE_BASE_URL}/maplibre-gl.js`),
+    ]).then(() => {
+      if (!window.maplibregl) throw new Error("MapLibre failed to load.");
+      return window.maplibregl;
+    }).catch((error) => {
+      mapLibrePromise = null;
+      throw error;
+    });
+  }
+  return mapLibrePromise;
+}
+
+function loadMapLibreAsset(type, url) {
+  const selector = `[data-apex-maplibre="${type}"]`;
+  const existing = document.querySelector(selector);
+  if (existing?.dataset.loaded === "true") return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const element = existing || document.createElement(type === "style" ? "link" : "script");
+    const onLoad = () => {
+      element.dataset.loaded = "true";
+      resolve();
+    };
+    const onError = () => {
+      element.remove();
+      reject(new Error(`MapLibre ${type} failed to load.`));
+    };
+    element.addEventListener("load", onLoad, { once: true });
+    element.addEventListener("error", onError, { once: true });
+
+    if (existing) return;
+    element.dataset.apexMaplibre = type;
+    if (type === "style") {
+      element.rel = "stylesheet";
+      element.href = url;
+    } else {
+      element.src = url;
+      element.async = true;
+    }
+    document.head.append(element);
+  });
 }
 
 function waitForMapLoad(map, timeoutMs) {

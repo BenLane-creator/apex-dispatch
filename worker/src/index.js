@@ -3,7 +3,7 @@ const MATRIX_URL = "https://routes.googleapis.com/distanceMatrix/v2:computeRoute
 const MAX_BODY_BYTES = 32_000;
 const CACHE_TTL_SECONDS = 60;
 const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_REQUESTS = 30;
+const RATE_LIMIT_MAX_REQUESTS = 12;
 const rateBuckets = new Map();
 
 const ROUTE_FIELD_MASK = [
@@ -49,10 +49,13 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/health") {
+      const providerKeyPresent = Boolean(String(env.ROUTES_API_KEY || "").trim());
       return jsonResponse({
         ok: true,
         service: "apex-routes",
-        providerConfigured: Boolean(env.ROUTES_API_KEY),
+        providerKeyPresent,
+        providerConfigured: providerKeyPresent,
+        providerStatus: "unchecked",
         timestamp: new Date().toISOString(),
       }, 200, cors);
     }
@@ -75,21 +78,19 @@ export default {
       );
     }
 
-    const routeApiKey = env.ROUTES_API_KEY;
+    const routeApiKey = String(env.ROUTES_API_KEY || "").trim();
     if (!routeApiKey) {
       return jsonResponse({ error: "ROUTES_API_KEY is not configured." }, 500, cors);
     }
 
-    const contentLength = Number(request.headers.get("Content-Length") || 0);
-    if (contentLength > MAX_BODY_BYTES) {
-      return jsonResponse({ error: "Request body is too large." }, 413, cors);
-    }
-
     let body;
     try {
-      body = await request.json();
-    } catch {
-      return jsonResponse({ error: "Invalid JSON request body." }, 400, cors);
+      body = await readJsonBody(request);
+    } catch (error) {
+      return jsonResponse({
+        error: error?.message || "Invalid JSON request body.",
+        code: error?.code || "INVALID_JSON",
+      }, Number(error?.status || 400), cors);
     }
 
     try {
@@ -122,11 +123,35 @@ export default {
       const status = Number(error?.status || 500);
       return jsonResponse({
         error: error?.message || "Route request failed.",
-        details: error?.details || undefined,
+        code: error?.code || "ROUTE_REQUEST_FAILED",
       }, status, cors);
     }
   },
 };
+
+async function readJsonBody(request) {
+  const contentLength = Number(request.headers.get("Content-Length") || 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+    throw httpError(413, "Request body is too large.", null, "BODY_TOO_LARGE");
+  }
+
+  let text;
+  try {
+    text = await request.text();
+  } catch {
+    throw httpError(400, "Invalid JSON request body.", null, "INVALID_JSON");
+  }
+
+  if (new TextEncoder().encode(text).byteLength > MAX_BODY_BYTES) {
+    throw httpError(413, "Request body is too large.", null, "BODY_TOO_LARGE");
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw httpError(400, "Invalid JSON request body.", null, "INVALID_JSON");
+  }
+}
 
 function validateRoutePlanRequest(body) {
   const origin = normalizePoint(body.origin, "origin");
@@ -423,11 +448,29 @@ async function callRoutingProvider(url, body, fieldMask, apiKey) {
   }
 
   if (!response.ok) {
-    const message = payload?.error?.message || payload?.message || `Routing service error ${response.status}.`;
-    throw httpError(response.status >= 500 ? 502 : 400, message, payload);
+    const providerError = extractProviderError(payload);
+    const code = providerError.reason || providerError.status || `ROUTING_PROVIDER_${response.status}`;
+    const credentialFailure = ["API_KEY_INVALID", "API_KEY_SERVICE_BLOCKED", "PERMISSION_DENIED", "UNAUTHENTICATED"]
+      .includes(code);
+    const status = credentialFailure ? 503 : response.status >= 500 ? 502 : 400;
+    const message = providerError.message || `Routing service error ${response.status}.`;
+    throw httpError(status, message, null, code);
   }
 
   return payload;
+}
+
+function extractProviderError(payload) {
+  const candidate = Array.isArray(payload)
+    ? payload.find((entry) => entry?.error)?.error
+    : payload?.error || payload;
+  const details = Array.isArray(candidate?.details) ? candidate.details : [];
+  const errorInfo = details.find((detail) => typeof detail?.reason === "string");
+  return {
+    message: typeof candidate?.message === "string" ? cleanText(candidate.message, 500) : "",
+    reason: errorInfo?.reason || "",
+    status: typeof candidate?.status === "string" ? candidate.status : "",
+  };
 }
 
 function toProviderWaypoint(point) {
@@ -483,10 +526,11 @@ function cleanText(value, maxLength) {
   return String(value || "").trim().replace(/[\u0000-\u001F\u007F]/g, " ").slice(0, maxLength);
 }
 
-function httpError(status, message, details) {
+function httpError(status, message, details, code) {
   const error = new Error(message);
   error.status = status;
   error.details = details;
+  error.code = code;
   return error;
 }
 
